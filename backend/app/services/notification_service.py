@@ -64,7 +64,7 @@ class NotificationService:
             # Email configuration (mock for demo)
             smtp_server = getattr(settings, 'SMTP_SERVER', 'localhost')
             smtp_port = getattr(settings, 'SMTP_PORT', 587)
-            smtp_username = getattr(settings, 'SMTP_USERNAME', 'noreply@recoverai.com')
+            smtp_username = getattr(settings, 'SMTP_USERNAME', 'noreply@rinexor.com')
             smtp_password = getattr(settings, 'SMTP_PASSWORD', 'password')
             
             # Create message
@@ -133,10 +133,10 @@ class NotificationService:
                 <li>Contact debtor if required</li>
             </ul>
             
-            <p>Please log into the RecoverAI Pro platform to view full case details and take action.</p>
+            <p>Please log into the Rinexor platform to view full case details and take action.</p>
             
             <p>Best regards,<br>
-            RecoverAI Pro System</p>
+            Rinexor System</p>
         </body>
         </html>
         """
@@ -177,7 +177,7 @@ class NotificationService:
             <p>Access the admin dashboard for detailed analytics and corrective actions.</p>
             
             <p>Best regards,<br>
-            RecoverAI Pro System</p>
+            Rinexor System</p>
         </body>
         </html>
         """

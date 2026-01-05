@@ -8,7 +8,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(
-    title="RecoverAI Pro API",
+    title="Rinexor API",
     description="AI-powered Debt Collection Agency Management Platform",
     version="1.0.0",
     docs_url="/api/docs",
@@ -27,7 +27,7 @@ app.add_middleware(
 @app.on_event("startup")
 async def startup_event():
     """Initialize services on startup"""
-    logger.info("🚀 Starting RecoverAI Pro Backend...")
+    logger.info("🚀 Starting Rinexor Backend...")
     
     # Initialize database
     try:
@@ -62,7 +62,7 @@ async def startup_event():
 def root():
     return {
         "status": "running",
-        "service": "RecoverAI Pro Backend",
+        "service": "Rinexor Backend",
         "version": "1.0.0",
         "docs": "/api/docs",
         "health": "/api/health"
@@ -74,7 +74,7 @@ def health_check():
     return {
         "status": "healthy",
         "timestamp": datetime.utcnow().isoformat(),
-        "service": "recoverai-backend",
+        "service": "rinexor-backend",
         "version": "1.0.0"
     }
 

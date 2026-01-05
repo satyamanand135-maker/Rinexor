@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 
 print("=" * 60)
-print("RECOVERAI PRO - DATABASE SETUP")
+print("RINEXOR - DATABASE SETUP")
 print("=" * 60)
 
 # Add current directory to path
@@ -87,7 +87,7 @@ try:
     # Enterprise Admin
     admin = User(
         id=str(uuid.uuid4()),
-        email="admin@recoverai.com",
+        email="admin@rinexor.com",
         hashed_password="$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW",  # "secret"
         full_name="System Administrator",
         role=UserRole.ENTERPRISE_ADMIN,

@@ -5,7 +5,7 @@ from typing import Optional
 class Settings:
     # API
     API_V1_STR: str = "/api/v1"
-    PROJECT_NAME: str = "RecoverAI Pro"
+    PROJECT_NAME: str = "Rinexor"
     
     # Security
     SECRET_KEY: str = "your-secret-key-for-jwt-tokens"
@@ -13,7 +13,7 @@ class Settings:
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     
     # Database - Use SQLite for hackathon (no psycopg2 needed!)
-    DATABASE_URL: str = "sqlite:///./recoverai.db"
+    DATABASE_URL: str = "sqlite:///./rinexor.db"
     
     # CORS
     CORS_ORIGINS: list = ["http://localhost:3000", "http://localhost:8000"]

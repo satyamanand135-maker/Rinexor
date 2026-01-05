@@ -1,4 +1,4 @@
-# RecoverAI Pro - API Documentation
+# Rinexor - API Documentation
 
 ## Quick Start
 - Backend: http://localhost:9000
@@ -6,7 +6,7 @@
 
 ## How to Use
 1. Login: POST /api/v1/auth/login
-   Body: username=admin@recoverai.com&password=secret
+   Body: username=admin@rinexor.com&password=secret
 
 2. Get token from response
 
@@ -14,7 +14,7 @@
    Header: Authorization: Bearer YOUR_TOKEN
 
 ## Test Users
-- Admin: admin@recoverai.com / secret
+- Admin: admin@rinexor.com / secret
 - DCA Agent: agent@alphacollections.com / secret
 
 ## 🚀 NEW: Complete API Endpoints
@@ -65,6 +65,8 @@
 - POST /api/v1/admin/sla/check-violations - Check SLA breaches
 - GET /api/v1/admin/system-stats - System statistics
 - POST /api/v1/admin/recalculate-metrics - Recalculate metrics
+- **POST /api/v1/admin/upload-cases** - 📁 **Bulk upload cases from CSV**
+- **GET /api/v1/admin/upload-template** - 📋 **Get CSV template and instructions**
 
 ## 🔧 Backend Services Now Include:
 
@@ -104,6 +106,8 @@
 - ✅ Comprehensive reporting
 - ✅ Role-based access control
 - ✅ Full audit trails
+- ✅ **CSV Bulk Upload** - Enterprise admins can upload cases from CSV files
+- ✅ **Template Generation** - Download CSV templates with sample data
 
 ## Need Help?
 Check live docs: http://localhost:9000/api/docs

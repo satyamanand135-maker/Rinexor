@@ -140,7 +140,7 @@ def test_sla_tasks():
 
 def main():
     """Run all tests"""
-    print("🧪 Testing RecoverAI Pro New Services")
+    print("🧪 Testing Rinexor New Services")
     print("=" * 50)
     
     test_workflow_service()
@@ -150,7 +150,7 @@ def main():
     
     print("\n" + "=" * 50)
     print("✅ All service tests completed!")
-    print("\n🚀 Your RecoverAI Pro backend is ready with:")
+    print("\n🚀 Your Rinexor backend is ready with:")
     print("  • WorkflowService - Case processing and SLA management")
     print("  • AllocationService - Intelligent DCA allocation")
     print("  • NotificationService - Email/SMS alerts")
