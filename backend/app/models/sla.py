@@ -1,4 +1,5 @@
-from sqlalchemy import Column, String, Text, DateTime, Boolean, Integer, Float, JSON, Enum
+from sqlalchemy import Column, String, Text, DateTime, Boolean, Integer, Float, JSON, Enum, ForeignKey
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.core.database import Base
 import enum
@@ -51,9 +52,6 @@ class SLARule(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     last_triggered = Column(DateTime(timezone=True), nullable=True)
     
-    # Relationships (self-referential for escalation chain)
-    next_rule = relationship("SLARule", remote_side=[id], post_update=True)
-    
     def __repr__(self):
         return f"<SLARule {self.name} ({self.rule_type})>"
 
@@ -64,26 +62,21 @@ class SLABreach(Base):
     
     # What was breached
     case_id = Column(String, ForeignKey("cases.id"), nullable=False, index=True)
-    rule_id = Column(String, ForeignKey("sla_rules.id"), nullable=False)
+    breach_type = Column(String, nullable=False)  # "contact_sla" or "resolution_sla"
     
     # Breach details
-    breached_at = Column(DateTime(timezone=True), server_default=func.now())
-    expected_deadline = Column(DateTime(timezone=True), nullable=False)
-    actual_time = Column(DateTime(timezone=True), nullable=False)
-    delay_hours = Column(Float, nullable=False)
+    detected_at = Column(DateTime, server_default=func.now())
+    deadline = Column(DateTime, nullable=False)
+    days_overdue = Column(Integer, nullable=False)
     
     # Resolution
-    resolved_at = Column(DateTime(timezone=True), nullable=True)
+    is_resolved = Column(Boolean, default=False)
+    resolved_at = Column(DateTime, nullable=True)
     resolved_by = Column(String, ForeignKey("users.id"), nullable=True)
     resolution_notes = Column(Text)
     
     # Timestamps
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    
-    # Relationships
-    case = relationship("Case")
-    rule = relationship("SLARule")
-    resolver = relationship("User")
+    created_at = Column(DateTime, server_default=func.now())
     
     def __repr__(self):
-        return f"<SLABreach for Case {self.case_id[:8]}... Rule {self.rule_id[:8]}...>"
+        return f"<SLABreach for Case {self.case_id[:8]}... Type {self.breach_type}>"

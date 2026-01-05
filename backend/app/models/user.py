@@ -2,6 +2,13 @@ from sqlalchemy import Column, String, DateTime, Boolean, ForeignKey
 from sqlalchemy.sql import func
 from app.core.database import Base
 
+
+class UserRole:
+    ENTERPRISE_ADMIN = "enterprise_admin"
+    COLLECTION_MANAGER = "collection_manager"
+    DCA_AGENT = "dca_agent"
+
+
 class User(Base):
     __tablename__ = "users"
     
@@ -13,6 +20,7 @@ class User(Base):
     dca_id = Column(String, ForeignKey("dcas.id"))
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, onupdate=func.now())
     
     def __repr__(self):
         return f"<User {self.email}>"

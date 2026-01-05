@@ -1,66 +1,45 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
+from datetime import timedelta
+
 from app.core.database import get_db
-from app.core.security import create_access_token, verify_password, get_password_hash
-from app.schemas.user import UserCreate, UserLogin, Token
-from app.models.user import User
+from app.core.security import (
+    create_access_token, 
+    validate_user_credentials,
+    get_current_active_user
+)
 
 router = APIRouter()
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
-@router.post("/register", response_model=Token)
-async def register(user_data: UserCreate, db: Session = Depends(get_db)):
-    # Check if user exists
-    db_user = db.query(User).filter(User.email == user_data.email).first()
-    if db_user:
-        raise HTTPException(
-            status_code=400,
-            detail="Email already registered"
-        )
-    
-    # Create new user
-    hashed_password = get_password_hash(user_data.password)
-    db_user = User(
-        email=user_data.email,
-        hashed_password=hashed_password,
-        full_name=user_data.full_name,
-        role=user_data.role,
-        dca_id=user_data.dca_id
-    )
-    
-    db.add(db_user)
-    db.commit()
-    db.refresh(db_user)
-    
-    # Create access token
-    access_token = create_access_token(
-        data={"sub": db_user.email, "role": db_user.role.value}
-    )
-    
-    return {"access_token": access_token, "token_type": "bearer"}
-
-@router.post("/login", response_model=Token)
+@router.post("/login")
 async def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db)
 ):
-    user = db.query(User).filter(User.email == form_data.username).first()
-    if not user or not verify_password(form_data.password, user.hashed_password):
+    """Login user (simplified for demo)"""
+    user = validate_user_credentials(form_data.username, form_data.password)
+    
+    if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
     
-    if not user.is_active:
-        raise HTTPException(
-            status_code=400,
-            detail="Inactive user"
-        )
-    
+    # Create token
     access_token = create_access_token(
-        data={"sub": user.email, "role": user.role.value}
+        data={"sub": user["email"], "role": user["role"], "user_id": user["id"]}
     )
     
     return {"access_token": access_token, "token_type": "bearer"}
+
+@router.get("/me")
+async def read_users_me(current_user: dict = Depends(get_current_active_user)):
+    """Get current user info (simplified)"""
+    return {
+        "id": current_user.get("user_id", "demo_id"),
+        "email": current_user.get("sub", "demo@email.com"),
+        "role": current_user.get("role", "user"),
+        "dca_id": current_user.get("dca_id")
+    }

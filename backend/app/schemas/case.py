@@ -1,8 +1,12 @@
 from pydantic import BaseModel, Field, validator
-from typing import Optional, List
+from typing import Optional, List, Literal
 from datetime import datetime
-from app.models.case import CaseStatus, CasePriority, RecoveryScoreBand
 from .base import BaseSchema, TimestampSchema
+
+# Define status and priority as Literal types for Pydantic
+CaseStatusType = Literal["new", "allocated", "in_progress", "escalated", "resolved", "returned", "closed"]
+CasePriorityType = Literal["high", "medium", "low"]
+RecoveryScoreBandType = Literal["high", "medium", "low"]
 
 class CaseBase(BaseSchema):
     account_id: str = Field(..., description="Unique account identifier")
@@ -20,11 +24,11 @@ class CaseCreate(CaseBase):
     pass
 
 class CaseUpdate(BaseSchema):
-    status: Optional[CaseStatus] = None
-    priority: Optional[CasePriority] = None
+    status: Optional[CaseStatusType] = None
+    priority: Optional[CasePriorityType] = None
     current_amount: Optional[float] = None
     dca_id: Optional[str] = None
-    recovery_score: Optional[float] = Field(None, ge=0, le=1)
+    recovery_score: Optional[float] = Field(None, ge=0, le=100)
     
     @validator('current_amount')
     def validate_current_amount(cls, v):
@@ -34,18 +38,18 @@ class CaseUpdate(BaseSchema):
 
 class CaseInDB(CaseBase, TimestampSchema):
     id: str
-    status: CaseStatus
-    priority: CasePriority
+    status: CaseStatusType
+    priority: CasePriorityType
     recovery_score: float
-    recovery_score_band: RecoveryScoreBand
+    recovery_score_band: RecoveryScoreBandType
     dca_id: Optional[str]
     allocated_by: Optional[str]
     allocation_date: Optional[datetime]
-    ml_features: dict
+    ml_features: Optional[dict] = {}
     sla_contact_deadline: Optional[datetime]
     sla_resolution_deadline: Optional[datetime]
-    sla_breached: bool
-    closed_at: Optional[datetime]
+    first_contact_date: Optional[datetime] = None
+    resolved_date: Optional[datetime] = None
 
 class CaseResponse(CaseInDB):
     dca_name: Optional[str] = None
@@ -57,8 +61,8 @@ class CaseAllocationRequest(BaseSchema):
     allocation_reason: Optional[str] = None
     
 class CaseSearchParams(BaseSchema):
-    status: Optional[CaseStatus] = None
-    priority: Optional[CasePriority] = None
+    status: Optional[CaseStatusType] = None
+    priority: Optional[CasePriorityType] = None
     dca_id: Optional[str] = None
     recovery_score_min: Optional[float] = None
     recovery_score_max: Optional[float] = None

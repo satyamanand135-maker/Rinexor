@@ -54,7 +54,7 @@ class AuditLog(Base):
     case = relationship("Case", back_populates="audit_logs", foreign_keys=[entity_id], primaryjoin="and_(AuditLog.entity_id==Case.id, AuditLog.entity_type=='case')")
     
     # Indexes
-   __table_args__ = (
+    __table_args__ = (
         Index('idx_audit_entity', 'entity_type', 'entity_id'),
         Index('idx_audit_timestamp', 'timestamp'),
         Index('idx_audit_user_action', 'user_id', 'action'),
