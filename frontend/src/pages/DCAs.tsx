@@ -15,10 +15,10 @@ import {
   Star,
   X,
 } from 'lucide-react';
-import { api } from '@/lib/api';
-import type { DCA, DCAFilters } from '@/types';
-import LoadingSpinner from '@/components/LoadingSpinner';
-import { formatPercentage, getPerformanceColor } from '@/lib/utils';
+import { api } from '../lib/api';
+import type { DCA, DCAFilters } from '../types';
+import LoadingSpinner from '../components/LoadingSpinner';
+import { formatPercentage, getPerformanceColor } from '../lib/utils';
 
 export default function DCAs() {
   const [dcas, setDcas] = useState<DCA[]>([]);

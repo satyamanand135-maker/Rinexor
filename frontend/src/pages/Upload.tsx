@@ -9,8 +9,8 @@ import {
   AlertCircle,
   Loader2,
 } from 'lucide-react';
-import { api } from '@/lib/api';
-import type { UploadResult } from '@/types';
+import { api } from '../lib/api';
+import type { UploadResult } from '../types';
 
 export default function Upload() {
   const [file, setFile] = useState<File | null>(null);

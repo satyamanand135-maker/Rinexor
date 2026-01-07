@@ -10,10 +10,10 @@ import {
   AlertCircle,
   ArrowUpDown,
 } from 'lucide-react';
-import { api } from '@/lib/api';
-import type { Case, CaseFilters } from '@/types';
-import LoadingSpinner from '@/components/LoadingSpinner';
-import { formatCurrency, formatDate, getStatusColor, getPriorityColor } from '@/lib/utils';
+import { api } from '../lib/api';
+import type { Case, CaseFilters } from '../types';
+import LoadingSpinner from '../components/LoadingSpinner';
+import { formatCurrency, formatDate, getStatusColor, getPriorityColor } from '../lib/utils';
 
 export default function Cases() {
   const [cases, setCases] = useState<Case[]>([]);

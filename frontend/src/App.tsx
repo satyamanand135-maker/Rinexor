@@ -1,14 +1,14 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider, useAuth } from '@/contexts/AuthContext';
-import Layout from '@/components/Layout';
-import Login from '@/pages/Login';
-import Dashboard from '@/pages/Dashboard';
-import Cases from '@/pages/Cases';
-import DCAs from '@/pages/DCAs';
-import Upload from '@/pages/Upload';
-import Reports from '@/pages/Reports';
-import Users from '@/pages/Users';
-import LoadingSpinner from '@/components/LoadingSpinner';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
+import Layout from './components/Layout';
+import Login from './pages/Login';
+import Dashboard from './pages/Dashboard';
+import Cases from './pages/Cases';
+import DCAs from './pages/DCAs';
+import Upload from './pages/Upload';
+import Reports from './pages/Reports';
+import Users from './pages/Users';
+import LoadingSpinner from './components/LoadingSpinner';
 
 // Protected Route Component
 function ProtectedRoute({ children }: { children: React.ReactNode }) {

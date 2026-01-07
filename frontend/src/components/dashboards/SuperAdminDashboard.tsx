@@ -14,11 +14,11 @@ import {
   Activity,
   Eye,
 } from 'lucide-react';
-import { api } from '@/lib/api';
-import type { DashboardStats } from '@/types';
-import LoadingSpinner from '@/components/LoadingSpinner';
-import { formatCurrency, formatPercentage } from '@/lib/utils';
-import { useAuth } from '@/contexts/AuthContext';
+import { api } from '../../lib/api';
+import type { DashboardStats } from '../../types';
+import LoadingSpinner from '../LoadingSpinner';
+import { formatCurrency, formatPercentage } from '../../lib/utils';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface StatCardProps {
   title: string;

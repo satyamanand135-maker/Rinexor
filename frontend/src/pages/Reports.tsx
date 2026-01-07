@@ -8,10 +8,10 @@ import {
   Filter,
   RefreshCw,
 } from 'lucide-react';
-import { api } from '@/lib/api';
-import type { ReportData } from '@/types';
-import LoadingSpinner from '@/components/LoadingSpinner';
-import { formatCurrency, formatPercentage, formatDate } from '@/lib/utils';
+import { api } from '../lib/api';
+import type { ReportData } from '../types';
+import LoadingSpinner from '../components/LoadingSpinner';
+import { formatCurrency, formatPercentage, formatDate } from '../lib/utils';
 
 export default function Reports() {
   const [dcaPerformance, setDcaPerformance] = useState<ReportData | null>(null);

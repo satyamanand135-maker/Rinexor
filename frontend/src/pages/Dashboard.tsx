@@ -1,8 +1,8 @@
-import { useAuth } from '@/contexts/AuthContext';
-import SuperAdminDashboard from '@/components/dashboards/SuperAdminDashboard';
-import EnterpriseAdminDashboard from '@/components/dashboards/EnterpriseAdminDashboard';
-import DCAAgentDashboard from '@/components/dashboards/DCAAgentDashboard';
-import LoadingSpinner from '@/components/LoadingSpinner';
+import { useAuth } from '../contexts/AuthContext';
+import SuperAdminDashboard from '../components/dashboards/SuperAdminDashboard';
+import EnterpriseAdminDashboard from '../components/dashboards/EnterpriseAdminDashboard';
+import DCAAgentDashboard from '../components/dashboards/DCAAgentDashboard';
+import LoadingSpinner from '../components/LoadingSpinner';
 
 export default function Dashboard() {
   const { user } = useAuth();

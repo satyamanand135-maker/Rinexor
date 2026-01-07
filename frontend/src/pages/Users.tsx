@@ -11,11 +11,11 @@ import {
   CheckCircle,
   XCircle,
 } from 'lucide-react';
-import { api } from '@/lib/api';
-import type { User } from '@/types';
-import LoadingSpinner from '@/components/LoadingSpinner';
-import { useAuth } from '@/contexts/AuthContext';
-import { formatDate } from '@/lib/utils';
+import { api } from '../lib/api';
+import type { User } from '../types';
+import LoadingSpinner from '../components/LoadingSpinner';
+import { useAuth } from '../contexts/AuthContext';
+import { formatDate } from '../lib/utils';
 
 const roleColors = {
   enterprise_admin: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
