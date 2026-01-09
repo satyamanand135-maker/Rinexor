@@ -10,9 +10,9 @@ export function Table({
   empty?: ReactNode
 }) {
   return (
-    <div className="overflow-x-auto rounded-xl border border-slate-800">
-      <table className="min-w-full divide-y divide-slate-800 text-sm">
-        <thead className="bg-slate-900/60">
+    <div className="overflow-x-auto rounded-2xl border border-slate-800/70 bg-slate-950/30">
+      <table className="min-w-full divide-y divide-slate-800/70 text-sm">
+        <thead className="bg-slate-900/50 backdrop-blur">
           <tr>
             {columns.map((c) => (
               <th key={c} className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-300">
@@ -21,7 +21,7 @@ export function Table({
             ))}
           </tr>
         </thead>
-        <tbody className="divide-y divide-slate-900 bg-slate-950/20">
+        <tbody className="divide-y divide-slate-900/60">
           {rows.length === 0 ? (
             <tr>
               <td colSpan={columns.length} className="px-4 py-8 text-center text-slate-400">
@@ -30,7 +30,7 @@ export function Table({
             </tr>
           ) : (
             rows.map((r, idx) => (
-              <tr key={idx} className="hover:bg-slate-900/40">
+              <tr key={idx} className="transition-colors hover:bg-slate-900/40">
                 {r.map((cell, cidx) => (
                   <td key={cidx} className="px-4 py-2 align-top text-slate-200">
                     {cell}
@@ -44,4 +44,3 @@ export function Table({
     </div>
   )
 }
-

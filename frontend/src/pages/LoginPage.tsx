@@ -22,12 +22,22 @@ export function LoginPage() {
   )
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
-      <div className="mx-auto flex min-h-screen max-w-5xl items-center px-4 py-10">
+    <div className="relative min-h-screen bg-surface-950 text-slate-100">
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="absolute -left-24 -top-24 h-72 w-72 animate-float rounded-full bg-indigo-500/15 blur-3xl" />
+        <div className="absolute -bottom-24 -right-24 h-80 w-80 animate-float rounded-full bg-sky-500/15 blur-3xl [animation-delay:-2s]" />
+        <div className="absolute left-1/2 top-1/2 h-[34rem] w-[34rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-slate-500/10 blur-3xl" />
+      </div>
+      <div className="relative mx-auto flex min-h-screen max-w-5xl items-center px-4 py-10">
         <div className="grid w-full grid-cols-1 gap-6 md:grid-cols-2">
-          <div className="rounded-2xl border border-slate-800 bg-slate-950/30 p-6">
-            <div className="text-sm font-semibold tracking-wide text-slate-50">Rinexor</div>
-            <div className="mt-2 text-2xl font-semibold text-slate-50">Debt Collection Governance</div>
+          <div className="animate-fade-up rounded-2xl border border-slate-800/70 bg-slate-950/40 p-6 shadow-glow backdrop-blur">
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-sm font-semibold tracking-wide text-slate-50">Rinexor</div>
+              <div className="rounded-xl border border-slate-800/70 bg-slate-950/40 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-300">
+                Demo
+              </div>
+            </div>
+            <div className="mt-3 text-3xl font-semibold tracking-tight text-slate-50">Debt Collection Governance</div>
             <div className="mt-3 text-sm leading-6 text-slate-300">
               Role-based dashboards, AI prioritization, SLA monitoring, and audit-ready oversight for enterprise debt recovery.
             </div>
@@ -42,7 +52,7 @@ export function LoginPage() {
                       setPassword(u.password)
                       setError(null)
                     }}
-                    className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-900/40 px-3 py-2 text-left text-sm text-slate-100 hover:bg-slate-900"
+                    className="flex items-center justify-between rounded-xl border border-slate-800/70 bg-slate-900/35 px-3 py-2 text-left text-sm text-slate-100 transition-all duration-200 hover:-translate-y-0.5 hover:border-slate-700/80 hover:bg-slate-900"
                   >
                     <span className="font-medium">{u.label}</span>
                     <span className="text-xs text-slate-400">{u.email}</span>
@@ -52,6 +62,7 @@ export function LoginPage() {
             </div>
           </div>
 
+          <div className="animate-fade-up [animation-delay:40ms]">
           <Card title="Secure Login">
             <form
               className="space-y-4"
@@ -71,7 +82,7 @@ export function LoginPage() {
                 <input
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none ring-0 focus:border-slate-700"
+                  className="mt-1 w-full rounded-xl border border-slate-800/70 bg-slate-950/60 px-3 py-2 text-sm text-slate-100 outline-none ring-0 transition-colors focus:border-slate-700/80"
                   placeholder="name@company.com"
                   autoComplete="username"
                 />
@@ -81,7 +92,7 @@ export function LoginPage() {
                 <input
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none ring-0 focus:border-slate-700"
+                  className="mt-1 w-full rounded-xl border border-slate-800/70 bg-slate-950/60 px-3 py-2 text-sm text-slate-100 outline-none ring-0 transition-colors focus:border-slate-700/80"
                   placeholder="••••••••"
                   type="password"
                   autoComplete="current-password"
@@ -90,15 +101,15 @@ export function LoginPage() {
               {error ? <div className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">{error}</div> : null}
               <button
                 disabled={isBusy}
-                className="w-full rounded-lg bg-sky-500 px-3 py-2 text-sm font-semibold text-slate-950 disabled:opacity-60"
+                className="w-full rounded-xl bg-sky-500 px-3 py-2 text-sm font-semibold text-slate-950 transition-all duration-200 hover:-translate-y-0.5 hover:bg-sky-400 disabled:opacity-60"
               >
                 {isBusy ? 'Signing in…' : 'Sign in'}
               </button>
             </form>
           </Card>
+          </div>
         </div>
       </div>
     </div>
   )
 }
-

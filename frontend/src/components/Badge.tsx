@@ -12,6 +12,9 @@ export function Badge({ children, tone = 'neutral' }: { children: ReactNode; ton
             ? 'bg-sky-500/15 text-sky-200 ring-1 ring-sky-500/30'
             : 'bg-slate-500/15 text-slate-200 ring-1 ring-slate-500/30'
 
-  return <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${cls}`}>{children}</span>
+  return (
+    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium shadow-[0_0_0_1px_rgba(15,23,42,0.15)] ${cls}`}>
+      {children}
+    </span>
+  )
 }
-
