@@ -22,8 +22,56 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(auth.router)
-app.include_router(cases.router)
+app = FastAPI(
+    title="Rinexor API",
+    description="AI-powered Debt Collection Agency Management Platform",
+    version="1.0.0",
+    docs_url="/api/docs",
+    redoc_url="/api/redoc",
+)
+
+# CORS Middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize services on startup"""
+    logger.info("🚀 Starting Rinexor Backend...")
+    
+    # Initialize database
+    try:
+        from app.core.database import engine, Base
+        # Import models
+        from app.models import user, case, dca, case_note, audit
+        
+        # Create tables if they don't exist
+        Base.metadata.create_all(bind=engine)
+        logger.info("✅ Database tables verified")
+    except Exception as e:
+        logger.warning(f"⚠️ Database setup warning: {e}")
+    
+    # Initialize AI service
+    try:
+        from app.services.ai_service import AIService
+        ai_service = AIService()
+        ai_service.initialize()
+        logger.info("✅ AI service initialized")
+    except Exception as e:
+        logger.warning(f"⚠️ AI service warning: {e}")
+    
+    # Start workflow scheduler
+    try:
+        from app.services.workflow_scheduler import start_background_scheduler
+        start_background_scheduler()
+        logger.info("✅ Workflow scheduler started")
+    except Exception as e:
+        logger.warning(f"⚠️ Scheduler warning: {e}")
 
 @app.get("/")
 def root():
@@ -33,3 +81,10 @@ def root():
 def debug_users():
     return {"users": list(DEMO_USERS.keys()), "count": len(DEMO_USERS)}
 
+# For running directly
+if __name__ == "__main__":
+    import uvicorn
+    port = 8001  # Default port
+    print(f"🚀 Starting on port {port}")
+    print(f"📚 Docs: http://localhost:{port}/api/docs")
+    uvicorn.run(app, host="0.0.0.0", port=port)
