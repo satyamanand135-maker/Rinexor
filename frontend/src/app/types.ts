@@ -27,6 +27,8 @@ export type Case = {
   created_at: string
   updated_at: string
   remarks?: string | null
+  proof_type?: string | null
+  proof_reference?: string | null
 }
 
 export type KPI = {

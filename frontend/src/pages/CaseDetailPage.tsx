@@ -22,6 +22,8 @@ export function CaseDetailPage() {
   const [status, setStatus] = useState<CaseStatus>('pending')
   const [remarks, setRemarks] = useState<string>('')
   const [assignedDcaId, setAssignedDcaId] = useState<string>('')
+  const [proofType, setProofType] = useState<string>('')
+  const [proofReference, setProofReference] = useState<string>('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -38,6 +40,8 @@ export function CaseDetailPage() {
         setStatus(caseRes.status)
         setRemarks(caseRes.remarks ?? '')
         setAssignedDcaId(caseRes.assigned_dca_id)
+        setProofType(caseRes.proof_type ?? '')
+        setProofReference(caseRes.proof_reference ?? '')
         setDcas(dRes)
         setAudit(aRes)
       })
@@ -150,6 +154,30 @@ export function CaseDetailPage() {
               </select>
               {role === 'super_admin' ? <div className="mt-1 text-xs text-slate-500">Read-only in governance mode</div> : null}
             </div>
+            {(status === 'resolved' || status === 'recovered') && role !== 'super_admin' ? (
+              <>
+                <div>
+                  <label className="block text-xs font-medium text-slate-400">Proof Type</label>
+                  <input
+                    value={proofType}
+                    onChange={(e) => setProofType(e.target.value)}
+                    disabled={!caze || saving}
+                    className="mt-1 w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-sm text-slate-100 disabled:opacity-60"
+                    placeholder="e.g. UTR, gateway_reference, settlement_letter"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-400">Proof Reference</label>
+                  <input
+                    value={proofReference}
+                    onChange={(e) => setProofReference(e.target.value)}
+                    disabled={!caze || saving}
+                    className="mt-1 w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-sm text-slate-100 disabled:opacity-60"
+                    placeholder="Transaction ID, document ID, etc."
+                  />
+                </div>
+              </>
+            ) : null}
             <div>
               <label className="block text-xs font-medium text-slate-400">Remarks</label>
               <textarea
@@ -165,13 +193,23 @@ export function CaseDetailPage() {
               disabled={!caze || role === 'super_admin' || saving}
               onClick={async () => {
                 if (!token || !caze) return
+                if ((status === 'resolved' || status === 'recovered') && (!proofType.trim() || !proofReference.trim())) {
+                  setError('Proof type and reference are required for resolved/recovered')
+                  return
+                }
                 setSaving(true)
                 setError(null)
                 try {
                   const updated = await apiFetch<Case>(`/api/cases/${caze.id}`, {
                     token,
                     method: 'PUT',
-                    body: JSON.stringify({ status, remarks, assigned_dca_id: role === 'enterprise_admin' ? assignedDcaId : undefined }),
+                    body: JSON.stringify({
+                      status,
+                      remarks,
+                      assigned_dca_id: role === 'enterprise_admin' ? assignedDcaId : undefined,
+                      proof_type: status === 'resolved' || status === 'recovered' ? proofType || null : null,
+                      proof_reference: status === 'resolved' || status === 'recovered' ? proofReference || null : null,
+                    }),
                   })
                   setCaze(updated)
                   setAssignedDcaId(updated.assigned_dca_id)

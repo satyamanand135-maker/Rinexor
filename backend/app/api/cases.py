@@ -146,11 +146,15 @@ class Case(BaseModel):
     created_at: str
     updated_at: str
     remarks: Optional[str] = None
+    proof_type: Optional[str] = None
+    proof_reference: Optional[str] = None
 
 class CaseUpdate(BaseModel):
     status: Optional[str] = None
     remarks: Optional[str] = None
     assigned_dca_id: Optional[str] = None
+    proof_type: Optional[str] = None
+    proof_reference: Optional[str] = None
 
 class AuditEvent(BaseModel):
     id: str
@@ -256,6 +260,15 @@ def update_case(case_id: str, case_update: CaseUpdate, current_user: dict = Depe
     changes: Dict[str, Any] = {}
     
     # Update case
+    new_status = case_update.status or case.get("status")
+
+    if new_status in ["resolved", "recovered"]:
+        if not (case_update.proof_type and case_update.proof_reference):
+            raise HTTPException(
+                status_code=400,
+                detail="proof_type and proof_reference are required when marking a case as resolved or recovered",
+            )
+
     if case_update.status:
         changes["status"] = {"from": case.get("status"), "to": case_update.status}
         case["status"] = case_update.status
@@ -265,8 +278,21 @@ def update_case(case_id: str, case_update: CaseUpdate, current_user: dict = Depe
     if case_update.assigned_dca_id is not None:
         if current_user["role"] not in ["enterprise_admin", "super_admin"]:
             raise HTTPException(status_code=403, detail="Access denied")
-        changes["assigned_dca_id"] = {"from": case.get("assigned_dca_id"), "to": case_update.assigned_dca_id}
+        changes["assigned_dca_id"] = {
+            "from": case.get("assigned_dca_id"),
+            "to": case_update.assigned_dca_id,
+        }
         case["assigned_dca_id"] = case_update.assigned_dca_id
+
+    if case_update.proof_type is not None:
+        changes["proof_type"] = {"from": case.get("proof_type"), "to": case_update.proof_type}
+        case["proof_type"] = case_update.proof_type
+    if case_update.proof_reference is not None:
+        changes["proof_reference"] = {
+            "from": case.get("proof_reference"),
+            "to": case_update.proof_reference,
+        }
+        case["proof_reference"] = case_update.proof_reference
     
     case["updated_at"] = datetime.now().isoformat()
     DEMO_CASES[case_index] = case

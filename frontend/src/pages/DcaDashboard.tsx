@@ -71,13 +71,31 @@ export function DcaDashboard() {
                 disabled={!token || updatingId === c.id}
                 onClick={async () => {
                   if (!token) return
+                  let proof_type: string | undefined
+                  let proof_reference: string | undefined
+                  if (nextStatus === 'resolved' || nextStatus === 'recovered') {
+                    const pt = window.prompt('Enter proof type (e.g. UTR, gateway_reference, settlement_letter)')
+                    if (!pt) {
+                      return
+                    }
+                    const pr = window.prompt('Enter proof reference (transaction ID, document ID, etc.)')
+                    if (!pr) {
+                      return
+                    }
+                    proof_type = pt
+                    proof_reference = pr
+                  }
                   setUpdatingId(c.id)
                   setError(null)
                   try {
                     const updated = await apiFetch<Case>(`/api/cases/${c.id}`, {
                       token,
                       method: 'PUT',
-                      body: JSON.stringify({ status: nextStatus }),
+                      body: JSON.stringify({
+                        status: nextStatus,
+                        proof_type: proof_type,
+                        proof_reference: proof_reference,
+                      }),
                     })
                     setCases((prev) => prev.map((x) => (x.id === updated.id ? updated : x)))
                   } catch (err) {
