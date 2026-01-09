@@ -8,7 +8,7 @@ import { Card } from '../components/Card'
 import { Table } from '../components/Table'
 import { formatMoney, formatShortDate, isOverdue } from '../app/format'
 
-const statuses: CaseStatus[] = ['pending', 'in_progress', 'contacted', 'resolved', 'failed']
+const statuses: CaseStatus[] = ['pending', 'in_progress', 'contacted', 'promised', 'recovered', 'resolved', 'failed']
 const priorities: CasePriority[] = ['low', 'medium', 'high', 'critical']
 
 export function CasesPage() {

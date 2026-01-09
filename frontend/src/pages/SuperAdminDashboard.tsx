@@ -76,6 +76,10 @@ export function SuperAdminDashboard() {
           </Badge>,
           <span key={`${d.id}-active`}>{d.active_cases}</span>,
           <span key={`${d.id}-resolved`}>{d.resolved_cases}</span>,
+          <span key={`${d.id}-recovered`}>{d.recovered_amount ?? 0}</span>,
+          <span key={`${d.id}-time`}>
+            {typeof d.average_resolution_days === 'number' ? `${d.average_resolution_days}d` : '–'}
+          </span>,
           <Badge key={`${d.id}-sla`} tone={d.sla_breaches <= 2 ? 'success' : d.sla_breaches <= 5 ? 'warning' : 'danger'}>
             {d.sla_breaches}
           </Badge>,
@@ -122,7 +126,11 @@ export function SuperAdminDashboard() {
           <Table columns={['Enterprise', 'Total', 'Active', 'Resolved', 'Recovery']} rows={enterpriseRows} empty="No enterprises" />
         </Card>
         <Card title="DCA Performance">
-          <Table columns={['DCA', 'Score', 'Active', 'Resolved', 'SLA Breaches']} rows={dcaRows} empty="No DCAs" />
+          <Table
+            columns={['DCA', 'Score', 'Active', 'Resolved', 'Recovered Amount', 'Avg Days to Recover', 'SLA Breaches']}
+            rows={dcaRows}
+            empty="No DCAs"
+          />
         </Card>
       </div>
 

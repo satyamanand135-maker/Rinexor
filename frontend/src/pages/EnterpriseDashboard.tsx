@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useRef } from 'react'
 import { useAuth } from '../app/auth'
 import { apiFetch } from '../api/client'
 import type { AuditEvent, Case, DCA } from '../app/types'
@@ -8,6 +9,7 @@ import { Table } from '../components/Table'
 import { Badge } from '../components/Badge'
 import { formatShortDate, isOverdue } from '../app/format'
 import { Link } from 'react-router-dom'
+import { config } from '../app/config'
 
 export function EnterpriseDashboard() {
   const { state } = useAuth()
@@ -17,6 +19,11 @@ export function EnterpriseDashboard() {
   const [audit, setAudit] = useState<AuditEvent[]>([])
   const [error, setError] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
+  const [csvUploading, setCsvUploading] = useState(false)
+  const [creatingDca, setCreatingDca] = useState(false)
+  const [newDcaName, setNewDcaName] = useState('')
+  const [newDcaEmail, setNewDcaEmail] = useState('')
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   useEffect(() => {
     if (!token) return
@@ -120,28 +127,78 @@ export function EnterpriseDashboard() {
         <div className="mt-1 text-2xl font-semibold text-slate-50">Recovery Control Center</div>
         <div className="mt-2 text-sm text-slate-300">Allocate work to DCAs, track recoveries, and enforce SLA governance.</div>
         </div>
-        <button
-          disabled={!token || uploading}
-          onClick={async () => {
-            if (!token) return
-            setUploading(true)
-            setError(null)
-            try {
-              await apiFetch('/api/cases/upload', { token, method: 'POST' })
-              const c = await apiFetch<Case[]>('/api/cases', { token })
-              const a = await apiFetch<AuditEvent[]>('/api/audit?limit=8', { token }).catch(() => [] as AuditEvent[])
-              setCases(c)
-              setAudit(a)
-            } catch (err) {
-              setError(err instanceof Error ? err.message : 'Upload failed')
-            } finally {
-              setUploading(false)
-            }
-          }}
-          className="rounded-lg border border-slate-800 bg-slate-900/40 px-3 py-2 text-sm text-slate-100 hover:bg-slate-900 disabled:opacity-60"
-        >
-          {uploading ? 'Uploading…' : 'Bulk Upload (Demo)'}
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".csv,text/csv"
+            className="hidden"
+            onChange={async (e) => {
+              const f = e.target.files?.[0]
+              if (!f || !token) return
+              setCsvUploading(true)
+              setError(null)
+              try {
+                const form = new FormData()
+                form.append('file', f)
+                const res = await fetch(`${config.apiBaseUrl}/api/cases/upload-csv`, {
+                  method: 'POST',
+                  headers: { Authorization: `Bearer ${token}` },
+                  body: form,
+                })
+                if (!res.ok) {
+                  const payload = await res.json().catch(() => null)
+                  const msg =
+                    payload && typeof payload === 'object' && 'detail' in payload && typeof payload.detail === 'string'
+                      ? payload.detail
+                      : `Upload failed (${res.status})`
+                  throw new Error(msg)
+                }
+
+                const c = await apiFetch<Case[]>('/api/cases', { token })
+                const a = await apiFetch<AuditEvent[]>('/api/audit?limit=8', { token }).catch(() => [] as AuditEvent[])
+                setCases(c)
+                setAudit(a)
+              } catch (err) {
+                setError(err instanceof Error ? err.message : 'CSV upload failed')
+              } finally {
+                setCsvUploading(false)
+                if (fileInputRef.current) fileInputRef.current.value = ''
+              }
+            }}
+          />
+
+          <button
+            disabled={!token || csvUploading}
+            onClick={() => fileInputRef.current?.click()}
+            className="rounded-xl border border-slate-800/70 bg-slate-900/35 px-3 py-2 text-sm text-slate-100 transition-all duration-200 hover:-translate-y-0.5 hover:bg-slate-900 disabled:opacity-60"
+          >
+            {csvUploading ? 'Uploading CSV…' : 'Upload CSV'}
+          </button>
+
+          <button
+            disabled={!token || uploading}
+            onClick={async () => {
+              if (!token) return
+              setUploading(true)
+              setError(null)
+              try {
+                await apiFetch('/api/cases/upload', { token, method: 'POST' })
+                const c = await apiFetch<Case[]>('/api/cases', { token })
+                const a = await apiFetch<AuditEvent[]>('/api/audit?limit=8', { token }).catch(() => [] as AuditEvent[])
+                setCases(c)
+                setAudit(a)
+              } catch (err) {
+                setError(err instanceof Error ? err.message : 'Upload failed')
+              } finally {
+                setUploading(false)
+              }
+            }}
+            className="rounded-xl border border-slate-800/70 bg-slate-900/35 px-3 py-2 text-sm text-slate-100 transition-all duration-200 hover:-translate-y-0.5 hover:bg-slate-900 disabled:opacity-60"
+          >
+            {uploading ? 'Uploading…' : 'Bulk Upload (Demo)'}
+          </button>
+        </div>
       </div>
 
       {error ? <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">{error}</div> : null}
@@ -157,6 +214,52 @@ export function EnterpriseDashboard() {
           <Table columns={['Case', 'Priority', 'AI', 'SLA']} rows={riskyRows} empty="No cases" />
         </Card>
         <Card title="DCA Performance (Active Enterprise Work)">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div className="text-xs text-slate-400">Manage DCAs that can receive enterprise work.</div>
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                value={newDcaName}
+                onChange={(e) => setNewDcaName(e.target.value)}
+                placeholder="DCA name"
+                className="w-40 rounded-lg border border-slate-800 bg-slate-950 px-2 py-1 text-xs text-slate-100 placeholder:text-slate-500"
+              />
+              <input
+                value={newDcaEmail}
+                onChange={(e) => setNewDcaEmail(e.target.value)}
+                placeholder="Contact email (optional)"
+                className="w-52 rounded-lg border border-slate-800 bg-slate-950 px-2 py-1 text-xs text-slate-100 placeholder:text-slate-500"
+              />
+              <button
+                disabled={!token || creatingDca || !newDcaName.trim()}
+                onClick={async () => {
+                  if (!token || !newDcaName.trim()) return
+                  setCreatingDca(true)
+                  setError(null)
+                  try {
+                    await apiFetch<DCA>('/api/dashboard/dcas', {
+                      token,
+                      method: 'POST',
+                      body: JSON.stringify({
+                        name: newDcaName.trim(),
+                        contact_email: newDcaEmail.trim() || undefined,
+                      }),
+                    })
+                    const d = await apiFetch<DCA[]>('/api/dashboard/dcas', { token })
+                    setDcas(d)
+                    setNewDcaName('')
+                    setNewDcaEmail('')
+                  } catch (err) {
+                    setError(err instanceof Error ? err.message : 'Failed to create DCA')
+                  } finally {
+                    setCreatingDca(false)
+                  }
+                }}
+                className="rounded-lg bg-sky-500 px-3 py-1.5 text-xs font-semibold text-slate-950 disabled:opacity-60"
+              >
+                {creatingDca ? 'Adding…' : 'Add DCA'}
+              </button>
+            </div>
+          </div>
           <Table columns={['DCA', 'Assigned', 'Score', 'SLA Breaches']} rows={dcaRows} empty="No DCAs assigned" />
         </Card>
       </div>

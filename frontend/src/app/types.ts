@@ -9,7 +9,7 @@ export type UserProfile = {
   dca_id: string | null
 }
 
-export type CaseStatus = 'pending' | 'in_progress' | 'contacted' | 'resolved' | 'failed'
+export type CaseStatus = 'pending' | 'in_progress' | 'contacted' | 'promised' | 'recovered' | 'resolved' | 'failed'
 export type CasePriority = 'low' | 'medium' | 'high' | 'critical'
 
 export type Case = {
@@ -46,6 +46,8 @@ export type DCA = {
   active_cases: number
   resolved_cases: number
   sla_breaches: number
+  recovered_amount?: number
+  average_resolution_days?: number | null
 }
 
 export type Enterprise = {
@@ -68,4 +70,3 @@ export type AuditEvent = {
   dca_id?: string | null
   details?: Record<string, unknown> | null
 }
-

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../app/auth'
 import { apiFetch } from '../api/client'
-import type { Case } from '../app/types'
+import type { Case, CaseStatus } from '../app/types'
 import { StatCard } from '../components/StatCard'
 import { Card } from '../components/Card'
 import { Table } from '../components/Table'
@@ -14,6 +14,7 @@ export function DcaDashboard() {
   const token = state.status === 'authenticated' ? state.token : null
   const [cases, setCases] = useState<Case[]>([])
   const [error, setError] = useState<string | null>(null)
+  const [updatingId, setUpdatingId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!token) return
@@ -43,27 +44,66 @@ export function DcaDashboard() {
         return (prioRank[b.priority] ?? 0) - (prioRank[a.priority] ?? 0)
       })
       .slice(0, 10)
-      .map((c) => [
-        <div key={c.id} className="font-medium text-slate-100">
-          <Link className="hover:underline" to={`/cases/${c.id}`}>
-            {c.borrower_name}
-          </Link>
-          <div className="mt-0.5 text-xs text-slate-400">{c.borrower_phone}</div>
-        </div>,
-        <Badge key={`${c.id}-status`} tone={c.status === 'resolved' ? 'success' : c.status === 'failed' ? 'danger' : 'neutral'}>
-          {c.status.replace('_', ' ').toUpperCase()}
-        </Badge>,
-        <Badge key={`${c.id}-prio`} tone={c.priority === 'critical' ? 'danger' : c.priority === 'high' ? 'warning' : 'neutral'}>
-          {c.priority.toUpperCase()}
-        </Badge>,
-        <Badge key={`${c.id}-ai`} tone={c.ai_score >= 85 ? 'info' : c.ai_score >= 60 ? 'neutral' : 'warning'}>
-          {c.ai_score}
-        </Badge>,
-        <Badge key={`${c.id}-sla`} tone={isOverdue(c.sla_deadline) ? 'danger' : 'success'}>
-          {isOverdue(c.sla_deadline) ? 'OVERDUE' : 'OK'}
-        </Badge>,
-      ])
-  }, [cases])
+      .map((c) => {
+        const nextStatus: CaseStatus =
+          c.status === 'pending'
+            ? 'in_progress'
+            : c.status === 'in_progress'
+            ? 'promised'
+            : c.status === 'promised'
+            ? 'recovered'
+            : c.status
+
+        return [
+          <div key={c.id} className="font-medium text-slate-100">
+            <Link className="hover:underline" to={`/cases/${c.id}`}>
+              {c.borrower_name}
+            </Link>
+            <div className="mt-0.5 text-xs text-slate-400">{c.borrower_phone}</div>
+          </div>,
+          <div key={`${c.id}-status`} className="flex items-center gap-2">
+            <Badge tone={c.status === 'recovered' || c.status === 'resolved' ? 'success' : c.status === 'failed' ? 'danger' : 'neutral'}>
+              {c.status.replace('_', ' ').toUpperCase()}
+            </Badge>
+            {nextStatus !== c.status ? (
+              <button
+                type="button"
+                disabled={!token || updatingId === c.id}
+                onClick={async () => {
+                  if (!token) return
+                  setUpdatingId(c.id)
+                  setError(null)
+                  try {
+                    const updated = await apiFetch<Case>(`/api/cases/${c.id}`, {
+                      token,
+                      method: 'PUT',
+                      body: JSON.stringify({ status: nextStatus }),
+                    })
+                    setCases((prev) => prev.map((x) => (x.id === updated.id ? updated : x)))
+                  } catch (err) {
+                    setError(err instanceof Error ? err.message : 'Failed to update status')
+                  } finally {
+                    setUpdatingId(null)
+                  }
+                }}
+                className="rounded-full border border-slate-700 bg-slate-900 px-2 py-0.5 text-[10px] font-medium text-slate-100 hover:bg-slate-800 disabled:opacity-60"
+              >
+                {updatingId === c.id ? 'Updating…' : `Mark ${nextStatus.replace('_', ' ')}`}
+              </button>
+            ) : null}
+          </div>,
+          <Badge key={`${c.id}-prio`} tone={c.priority === 'critical' ? 'danger' : c.priority === 'high' ? 'warning' : 'neutral'}>
+            {c.priority.toUpperCase()}
+          </Badge>,
+          <Badge key={`${c.id}-ai`} tone={c.ai_score >= 85 ? 'info' : c.ai_score >= 60 ? 'neutral' : 'warning'}>
+            {c.ai_score}
+          </Badge>,
+          <Badge key={`${c.id}-sla`} tone={isOverdue(c.sla_deadline) ? 'danger' : 'success'}>
+            {isOverdue(c.sla_deadline) ? 'OVERDUE' : 'OK'}
+          </Badge>,
+        ]
+      })
+  }, [cases, token, updatingId])
 
   return (
     <div className="space-y-6">
@@ -88,4 +128,3 @@ export function DcaDashboard() {
     </div>
   )
 }
-

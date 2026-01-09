@@ -7,7 +7,7 @@ import { Badge } from '../components/Badge'
 import { Card } from '../components/Card'
 import { formatMoney, formatShortDate, isOverdue } from '../app/format'
 
-const statusOptions: CaseStatus[] = ['pending', 'in_progress', 'contacted', 'resolved', 'failed']
+const statusOptions: CaseStatus[] = ['pending', 'in_progress', 'contacted', 'promised', 'recovered', 'resolved', 'failed']
 
 export function CaseDetailPage() {
   const { caseId } = useParams()
