@@ -22,6 +22,9 @@ DEMO_DCAS = [
     {"id": "dca-002", "name": "Debt Masters LLC", "performance_score": 92, "active_cases": 38, "resolved_cases": 156, "sla_breaches": 1},
     {"id": "dca-003", "name": "Collection Experts", "performance_score": 78, "active_cases": 52, "resolved_cases": 98, "sla_breaches": 7},
     {"id": "dca-004", "name": "Professional Recovery", "performance_score": 88, "active_cases": 41, "resolved_cases": 134, "sla_breaches": 2},
+    {"id": "dca-005", "name": "Prime Recovery Partners", "performance_score": 95, "active_cases": 72, "resolved_cases": 210, "sla_breaches": 4},
+    {"id": "dca-006", "name": "Assured Collections Group", "performance_score": 82, "active_cases": 26, "resolved_cases": 94, "sla_breaches": 0},
+    {"id": "dca-007", "name": "Swift Debt Resolution", "performance_score": 67, "active_cases": 11, "resolved_cases": 42, "sla_breaches": 2},
 ]
 
 

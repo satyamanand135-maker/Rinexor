@@ -41,7 +41,7 @@ DEMO_USERS = {
         "role": "dca_user",
         "password": "dca123",
         "enterprise_id": "ent-001",
-        "dca_id": "dca-001"
+        "dca_id": "dca-002"
     }
 }
 
