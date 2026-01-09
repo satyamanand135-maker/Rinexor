@@ -1,118 +1,82 @@
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider, useAuth } from './contexts/AuthContext';
-import Layout from './components/Layout';
-import Login from './pages/Login';
-import Dashboard from './pages/Dashboard';
-import Cases from './pages/Cases';
-import DCAs from './pages/DCAs';
-import Upload from './pages/Upload';
-import Reports from './pages/Reports';
-import Users from './pages/Users';
-import LoadingSpinner from './components/LoadingSpinner';
+import { Navigate, Route, Routes } from 'react-router-dom'
+import { AuthProvider, useAuth } from './app/auth'
+import { Shell } from './components/Shell'
+import { CaseDetailPage } from './pages/CaseDetailPage'
+import { CasesPage } from './pages/CasesPage'
+import { DcaDashboard } from './pages/DcaDashboard'
+import { EnterpriseDashboard } from './pages/EnterpriseDashboard'
+import { LoginPage } from './pages/LoginPage'
+import { SuperAdminDashboard } from './pages/SuperAdminDashboard'
+import type { Role } from './app/types'
 
-// Protected Route Component
-function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, loading } = useAuth();
+function HomeRedirect() {
+  const { state } = useAuth()
+  if (state.status === 'loading') return null
+  if (state.status !== 'authenticated') return <Navigate to="/login" replace />
 
-  if (loading) {
-    return <LoadingSpinner />;
-  }
-
-  if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
-  }
-
-  return <>{children}</>;
+  if (state.user.role === 'super_admin') return <Navigate to="/super-admin" replace />
+  if (state.user.role === 'enterprise_admin') return <Navigate to="/enterprise" replace />
+  return <Navigate to="/dca" replace />
 }
 
-// App Routes
-function AppRoutes() {
-  const { isAuthenticated, loading } = useAuth();
+function Protected({ children }: { children: React.ReactNode }) {
+  const { state } = useAuth()
+  if (state.status === 'loading') return null
+  if (state.status !== 'authenticated') return <Navigate to="/login" replace />
+  return children
+}
 
-  if (loading) {
-    return <LoadingSpinner />;
-  }
+function RequireRoles({ roles, children }: { roles: Role[]; children: React.ReactNode }) {
+  const { state } = useAuth()
+  if (state.status === 'loading') return null
+  if (state.status !== 'authenticated') return <Navigate to="/login" replace />
+  if (!roles.includes(state.user.role)) return <Navigate to="/" replace />
+  return children
+}
 
+export default function App() {
   return (
-    <Routes>
-      <Route 
-        path="/login" 
-        element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Login />} 
-      />
-      <Route
-        path="/dashboard"
-        element={
-          <ProtectedRoute>
-            <Layout>
-              <Dashboard />
-            </Layout>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/cases"
-        element={
-          <ProtectedRoute>
-            <Layout>
-              <Cases />
-            </Layout>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/dcas"
-        element={
-          <ProtectedRoute>
-            <Layout>
-              <DCAs />
-            </Layout>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/upload"
-        element={
-          <ProtectedRoute>
-            <Layout>
-              <Upload />
-            </Layout>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/reports"
-        element={
-          <ProtectedRoute>
-            <Layout>
-              <Reports />
-            </Layout>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/users"
-        element={
-          <ProtectedRoute>
-            <Layout>
-              <Users />
-            </Layout>
-          </ProtectedRoute>
-        }
-      />
-      <Route path="/" element={<Navigate to="/dashboard" replace />} />
-      <Route path="*" element={<Navigate to="/dashboard" replace />} />
-    </Routes>
-  );
+    <AuthProvider>
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route
+          path="/"
+          element={
+            <Protected>
+              <Shell />
+            </Protected>
+          }
+        >
+          <Route index element={<HomeRedirect />} />
+          <Route
+            path="super-admin"
+            element={
+              <RequireRoles roles={['super_admin']}>
+                <SuperAdminDashboard />
+              </RequireRoles>
+            }
+          />
+          <Route
+            path="enterprise"
+            element={
+              <RequireRoles roles={['enterprise_admin']}>
+                <EnterpriseDashboard />
+              </RequireRoles>
+            }
+          />
+          <Route
+            path="dca"
+            element={
+              <RequireRoles roles={['dca_user']}>
+                <DcaDashboard />
+              </RequireRoles>
+            }
+          />
+          <Route path="cases" element={<CasesPage />} />
+          <Route path="cases/:caseId" element={<CaseDetailPage />} />
+        </Route>
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </AuthProvider>
+  )
 }
-
-function App() {
-  return (
-    <Router>
-      <AuthProvider>
-        <AppRoutes />
-      </AuthProvider>
-    </Router>
-  );
-}
-
-export default App;
