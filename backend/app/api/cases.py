@@ -1,381 +1,575 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
-from sqlalchemy.orm import Session
-from typing import List, Optional
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
+from pydantic import BaseModel
+from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
-
-from app.core.database import get_db
-from app.core.security import get_current_user, require_role
-from app.schemas.case import (
-    CaseCreate, CaseResponse, CaseUpdate, 
-    CaseAllocationRequest, CaseSearchParams
-)
-from app.services.workflow_service import WorkflowService
-from app.services.ai_service import AIService
-from app.models.case import Case, CaseStatus, CasePriority
-from app.models.case_note import CaseNote
 import uuid
+import random
+import csv
+import io
+from .auth import get_current_user
 
-router = APIRouter()
+router = APIRouter(prefix="/api", tags=["cases"])
 
-# Initialize AI service
-ai_service = AIService()
-ai_service.initialize()
+# Demo data
+DEMO_ENTERPRISES = [
+    {"id": "ent-001", "name": "First National Bank"},
+    {"id": "ent-002", "name": "Credit Union Plus"},
+    {"id": "ent-003", "name": "Metro Financial"}
+]
 
-@router.post("/", response_model=CaseResponse)
-async def create_case(
-    case_data: CaseCreate,
-    background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db),
-    current_user: dict = Depends(require_role(["enterprise_admin", "collection_manager"]))
-):
-    """Create new case with AI processing"""
-    # Process through workflow
-    processed_data = WorkflowService.process_new_case(case_data.dict(), db)
-    
-    # Create case
-    case = Case(
-        id=str(uuid.uuid4()),
-        account_id=case_data.account_id,
-        debtor_name=case_data.debtor_name,
-        debtor_email=case_data.debtor_email,
-        debtor_phone=case_data.debtor_phone,
-        debtor_address=case_data.debtor_address,
-        original_amount=case_data.original_amount,
-        current_amount=case_data.original_amount,
-        currency=case_data.currency,
-        days_delinquent=case_data.days_delinquent,
-        debt_age_days=case_data.debt_age_days,
-        status=processed_data["status"],
-        priority=processed_data["priority"],
-        recovery_score=processed_data["recovery_score"],
-        recovery_score_band="high" if processed_data["recovery_score"] >= 70 else "medium" if processed_data["recovery_score"] >= 40 else "low",
-        dca_id=processed_data["dca_id"],
-        allocated_by=current_user["id"] if processed_data["dca_id"] else None,
-        allocation_date=datetime.utcnow() if processed_data["dca_id"] else None,
-        ml_features={},  # Will be populated by AI
-        sla_contact_deadline=processed_data["sla_contact_deadline"],
-        sla_resolution_deadline=processed_data["sla_resolution_deadline"],
-        created_at=datetime.utcnow()
+DEMO_DCAS = [
+    {"id": "dca-001", "name": "Recovery Solutions Inc", "performance_score": 85, "active_cases": 45, "resolved_cases": 120, "sla_breaches": 3},
+    {"id": "dca-002", "name": "Debt Masters LLC", "performance_score": 92, "active_cases": 38, "resolved_cases": 156, "sla_breaches": 1},
+    {"id": "dca-003", "name": "Collection Experts", "performance_score": 78, "active_cases": 52, "resolved_cases": 98, "sla_breaches": 7},
+    {"id": "dca-004", "name": "Professional Recovery", "performance_score": 88, "active_cases": 41, "resolved_cases": 134, "sla_breaches": 2},
+    {"id": "dca-005", "name": "Prime Recovery Partners", "performance_score": 95, "active_cases": 72, "resolved_cases": 210, "sla_breaches": 4},
+    {"id": "dca-006", "name": "Assured Collections Group", "performance_score": 82, "active_cases": 26, "resolved_cases": 94, "sla_breaches": 0},
+    {"id": "dca-007", "name": "Swift Debt Resolution", "performance_score": 67, "active_cases": 11, "resolved_cases": 42, "sla_breaches": 2},
+]
+
+
+def compute_case_risk(amount: int, sla_deadline: datetime):
+    now = datetime.now()
+    days_overdue = 0
+    if sla_deadline < now:
+        days_overdue = (now - sla_deadline).days
+
+    score = 40
+
+    if amount >= 20000:
+        score += 25
+    elif amount >= 10000:
+        score += 15
+    elif amount >= 5000:
+        score += 5
+
+    score += min(days_overdue * 5, 35)
+
+    if score > 95:
+        score = 95
+
+    if score >= 85:
+        priority = "critical"
+    elif score >= 70:
+        priority = "high"
+    elif score >= 50:
+        priority = "medium"
+    else:
+        priority = "low"
+
+    return priority, score
+
+
+def select_dca_for_case(priority: str) -> str:
+    sorted_dcas = sorted(
+        DEMO_DCAS,
+        key=lambda d: (
+            -(d.get("performance_score") or 0),
+            d.get("sla_breaches") or 0,
+            d.get("active_cases") or 0,
+        ),
     )
-    
-    db.add(case)
-    db.commit()
-    db.refresh(case)
-    
-    # Run AI analysis in background
-    background_tasks.add_task(
-        perform_ai_analysis,
-        case.id,
-        case_data.dict(),
-        db
-    )
-    
-    return case
+    if not sorted_dcas:
+        return ""
+    return sorted_dcas[0]["id"]
 
-async def perform_ai_analysis(case_id: str, case_data: dict, db: Session):
-    """Background task for AI analysis"""
-    try:
-        # Get AI insights
-        ai_result = ai_service.analyze_case(case_data)
-        
-        # Update case with AI insights
-        case = db.query(Case).filter(Case.id == case_id).first()
-        if case:
-            case.ml_features = {
-                "ai_analysis": ai_result,
-                "analyzed_at": datetime.utcnow().isoformat()
-            }
-            case.recovery_score = ai_result["recovery_score"]
-            case.priority = ai_result["priority_level"]
-            db.commit()
-    except Exception as e:
-        print(f"AI analysis failed for case {case_id}: {e}")
 
-@router.get("/", response_model=List[CaseResponse])
-async def get_cases(
-    status: Optional[str] = Query(None, description="Filter by status"),
-    priority: Optional[str] = Query(None, description="Filter by priority"),
-    dca_id: Optional[str] = Query(None, description="Filter by DCA"),
-    days_delinquent_min: Optional[int] = Query(None, description="Min days delinquent"),
-    days_delinquent_max: Optional[int] = Query(None, description="Max days delinquent"),
-    search: Optional[str] = Query(None, description="Search in debtor name or account ID"),
-    skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=500),
-    db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
-):
-    """Get cases with filtering and pagination"""
-    query = db.query(Case)
+# Generate demo cases
+def generate_demo_cases():
+    cases = []
+    statuses = ["pending", "in_progress", "contacted", "resolved", "failed"]
+
+    borrower_names = [
+        "John Smith", "Sarah Johnson", "Michael Brown", "Emily Davis", "David Wilson",
+        "Lisa Anderson", "Robert Taylor", "Jennifer Martinez", "William Garcia", "Mary Rodriguez"
+    ]
     
-    # Apply role-based filtering
-    if current_user["role"] == "dca_agent":
-        query = query.filter(Case.dca_id == current_user.get("dca_id"))
-    elif current_user["role"] == "collection_manager":
-        # Managers see cases assigned to their DCAs
-        if current_user.get("dca_id"):
-            query = query.filter(Case.dca_id == current_user.get("dca_id"))
-    
-    # Apply filters
-    if status:
-        query = query.filter(Case.status == status)
-    if priority:
-        query = query.filter(Case.priority == priority)
-    if dca_id:
-        query = query.filter(Case.dca_id == dca_id)
-    if days_delinquent_min is not None:
-        query = query.filter(Case.days_delinquent >= days_delinquent_min)
-    if days_delinquent_max is not None:
-        query = query.filter(Case.days_delinquent <= days_delinquent_max)
-    if search:
-        query = query.filter(
-            (Case.debtor_name.ilike(f"%{search}%")) | 
-            (Case.account_id.ilike(f"%{search}%"))
-        )
-    
-    # Get total count for pagination
-    total = query.count()
-    
-    # Apply pagination
-    cases = query.order_by(Case.created_at.desc()).offset(skip).limit(limit).all()
+    for i in range(50):
+        case_id = str(uuid.uuid4())
+        borrower_name = random.choice(borrower_names)
+        email = f"{borrower_name.lower().replace(' ', '.')}@email.com"
+        amount = random.randint(500, 50000)
+        sla_deadline_dt = datetime.now() + timedelta(days=random.randint(-5, 30))
+        priority, ai_score = compute_case_risk(amount, sla_deadline_dt)
+        assigned_dca_id = select_dca_for_case(priority)
+
+        case = {
+            "id": case_id,
+            "borrower_name": borrower_name,
+            "borrower_email": email,
+            "borrower_phone": f"+1-555-{random.randint(100, 999)}-{random.randint(1000, 9999)}",
+            "amount": amount,
+            "status": random.choice(statuses),
+            "priority": priority,
+            "ai_score": ai_score,
+            "sla_deadline": sla_deadline_dt.isoformat(),
+            "assigned_dca_id": assigned_dca_id,
+            "enterprise_id": random.choice(DEMO_ENTERPRISES)["id"],
+            "created_at": (datetime.now() - timedelta(days=random.randint(1, 90))).isoformat(),
+            "updated_at": (datetime.now() - timedelta(days=random.randint(0, 30))).isoformat(),
+            "remarks": "Demo case for testing purposes" if random.random() > 0.7 else None
+        }
+        cases.append(case)
     
     return cases
 
-@router.get("/{case_id}", response_model=CaseResponse)
-async def get_case(
-    case_id: str,
-    db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
-):
-    """Get specific case by ID"""
-    case = db.query(Case).filter(Case.id == case_id).first()
-    
-    if not case:
-        raise HTTPException(status_code=404, detail="Case not found")
-    
-    # Check permissions
-    if (current_user["role"] == "dca_agent" and 
-        case.dca_id != current_user.get("dca_id")):
-        raise HTTPException(status_code=403, detail="Not authorized to view this case")
-    
-    return case
+DEMO_CASES = generate_demo_cases()
+AUDIT_LOG: List[dict] = []
 
-@router.put("/{case_id}", response_model=CaseResponse)
-async def update_case(
-    case_id: str,
-    case_update: CaseUpdate,
-    db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
-):
-    """Update case"""
-    case = db.query(Case).filter(Case.id == case_id).first()
-    
-    if not case:
-        raise HTTPException(status_code=404, detail="Case not found")
-    
-    # Check permissions
-    if current_user["role"] == "dca_agent":
-        if case.dca_id != current_user.get("dca_id"):
-            raise HTTPException(status_code=403, detail="Not authorized to update this case")
-        # DCA agents can only update status and current amount
-        if case_update.status:
-            old_status = case.status
-            case.status = case_update.status
-            case.updated_at = datetime.utcnow()
-            
-            # Add status change note
-            note = CaseNote(
-                id=str(uuid.uuid4()),
-                case_id=case_id,
-                user_id=current_user["id"],
-                content=f"Status changed from {old_status} to {case_update.status}",
-                note_type="status_change"
-            )
-            db.add(note)
-        
-        if case_update.current_amount is not None:
-            case.current_amount = case_update.current_amount
-    else:
-        # Admins and managers can update anything
-        for field, value in case_update.dict(exclude_unset=True).items():
-            setattr(case, field, value)
-        case.updated_at = datetime.utcnow()
-    
-    db.commit()
-    db.refresh(case)
-    
-    return case
-
-@router.post("/{case_id}/notes")
-async def add_case_note(
-    case_id: str,
-    content: str,
-    note_type: str = "general",
-    is_internal: bool = False,
-    db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
-):
-    """Add note to case"""
-    case = db.query(Case).filter(Case.id == case_id).first()
-    
-    if not case:
-        raise HTTPException(status_code=404, detail="Case not found")
-    
-    # Check permissions
-    if (current_user["role"] == "dca_agent" and 
-        case.dca_id != current_user.get("dca_id")):
-        raise HTTPException(status_code=403, detail="Not authorized to add notes to this case")
-    
-    note = CaseNote(
-        id=str(uuid.uuid4()),
-        case_id=case_id,
-        user_id=current_user["id"],
-        content=content,
-        note_type=note_type,
-        is_internal=is_internal,
-        created_at=datetime.utcnow()
+def log_audit_event(actor: dict, action: str, case: Optional[dict] = None, details: Optional[Dict[str, Any]] = None):
+    AUDIT_LOG.append(
+        {
+            "id": str(uuid.uuid4()),
+            "at": datetime.now().isoformat(),
+            "actor_email": actor.get("email"),
+            "actor_role": actor.get("role"),
+            "action": action,
+            "case_id": case.get("id") if case else None,
+            "enterprise_id": case.get("enterprise_id") if case else actor.get("enterprise_id"),
+            "dca_id": case.get("assigned_dca_id") if case else actor.get("dca_id"),
+            "details": details,
+        }
     )
-    
-    db.add(note)
-    db.commit()
-    
-    return {"message": "Note added successfully", "note_id": note.id}
 
-@router.get("/{case_id}/notes")
-async def get_case_notes(
-    case_id: str,
-    include_internal: bool = False,
-    db: Session = Depends(get_db),
+class Case(BaseModel):
+    id: str
+    borrower_name: str
+    borrower_email: str
+    borrower_phone: str
+    amount: int
+    status: str
+    priority: str
+    ai_score: int
+    sla_deadline: str
+    assigned_dca_id: str
+    enterprise_id: str
+    created_at: str
+    updated_at: str
+    remarks: Optional[str] = None
+    proof_type: Optional[str] = None
+    proof_reference: Optional[str] = None
+
+class CaseUpdate(BaseModel):
+    status: Optional[str] = None
+    remarks: Optional[str] = None
+    assigned_dca_id: Optional[str] = None
+    proof_type: Optional[str] = None
+    proof_reference: Optional[str] = None
+
+class AuditEvent(BaseModel):
+    id: str
+    at: str
+    actor_email: str
+    actor_role: str
+    action: str
+    case_id: Optional[str] = None
+    enterprise_id: Optional[str] = None
+    dca_id: Optional[str] = None
+    details: Optional[Dict[str, Any]] = None
+
+class KPI(BaseModel):
+    total_cases: int
+    total_dcas: int
+    total_enterprises: int
+    overall_recovery_rate: int
+    sla_breaches: int
+    high_priority_cases: int
+
+class DCA(BaseModel):
+    id: str
+    name: str
+    contact_email: str
+    performance_score: int
+    active_cases: int
+    resolved_cases: int
+    sla_breaches: int
+    recovered_amount: int
+    average_resolution_days: Optional[float] = None
+
+
+class DCACreate(BaseModel):
+    name: str
+    contact_email: Optional[str] = None
+    performance_score: Optional[int] = None
+
+class Enterprise(BaseModel):
+    id: str
+    name: str
+    total_cases: int
+    active_cases: int
+    resolved_cases: int
+    recovery_rate: int
+
+@router.get("/cases", response_model=List[Case])
+def get_cases(
+    enterprise_id: Optional[str] = Query(None),
+    assigned_dca_id: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    limit: Optional[int] = Query(None),
     current_user: dict = Depends(get_current_user)
 ):
-    """Get notes for a case"""
-    case = db.query(Case).filter(Case.id == case_id).first()
+    cases = DEMO_CASES.copy()
     
+    # Filter based on user role
+    if current_user["role"] == "enterprise_admin" and current_user["enterprise_id"]:
+        cases = [c for c in cases if c["enterprise_id"] == current_user["enterprise_id"]]
+    elif current_user["role"] == "dca_user" and current_user["dca_id"]:
+        cases = [c for c in cases if c["assigned_dca_id"] == current_user["dca_id"]]
+    
+    # Apply additional filters
+    if enterprise_id:
+        cases = [c for c in cases if c["enterprise_id"] == enterprise_id]
+    if assigned_dca_id:
+        cases = [c for c in cases if c["assigned_dca_id"] == assigned_dca_id]
+    if status:
+        cases = [c for c in cases if c["status"] == status]
+    
+    if limit:
+        cases = cases[:limit]
+    
+    return cases
+
+@router.get("/cases/{case_id}", response_model=Case)
+def get_case(case_id: str, current_user: dict = Depends(get_current_user)):
+    case = next((c for c in DEMO_CASES if c["id"] == case_id), None)
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
     
     # Check permissions
-    if (current_user["role"] == "dca_agent" and 
-        case.dca_id != current_user.get("dca_id")):
-        raise HTTPException(status_code=403, detail="Not authorized to view notes for this case")
+    if current_user["role"] == "enterprise_admin" and case["enterprise_id"] != current_user["enterprise_id"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    elif current_user["role"] == "dca_user" and case["assigned_dca_id"] != current_user["dca_id"]:
+        raise HTTPException(status_code=403, detail="Access denied")
     
-    query = db.query(CaseNote).filter(CaseNote.case_id == case_id)
-    
-    # DCA agents can't see internal notes
-    if current_user["role"] == "dca_agent" or not include_internal:
-        query = query.filter(CaseNote.is_internal == False)
-    
-    notes = query.order_by(CaseNote.created_at.desc()).all()
-    
-    return notes
+    return case
 
-@router.post("/allocate")
-async def allocate_cases(
-    allocation_request: CaseAllocationRequest,
-    db: Session = Depends(get_db),
-    current_user: dict = Depends(require_role(["enterprise_admin", "collection_manager"]))
-):
-    """Allocate cases to DCA"""
-    allocated = []
-    failed = []
+@router.put("/cases/{case_id}", response_model=Case)
+def update_case(case_id: str, case_update: CaseUpdate, current_user: dict = Depends(get_current_user)):
+    case_index = next((i for i, c in enumerate(DEMO_CASES) if c["id"] == case_id), None)
+    if case_index is None:
+        raise HTTPException(status_code=404, detail="Case not found")
     
-    for case_id in allocation_request.case_ids:
-        case = db.query(Case).filter(Case.id == case_id).first()
-        
-        if not case:
-            failed.append({"case_id": case_id, "error": "Case not found"})
-            continue
-        
-        # Update allocation
-        case.dca_id = allocation_request.dca_id
-        case.allocated_by = current_user["id"]
-        case.allocation_date = datetime.utcnow()
-        case.allocation_reason = allocation_request.allocation_reason
-        case.status = CaseStatus.ASSIGNED
-        case.updated_at = datetime.utcnow()
-        
-        # Add allocation note
-        note = CaseNote(
-            id=str(uuid.uuid4()),
-            case_id=case_id,
-            user_id=current_user["id"],
-            content=f"Case allocated to DCA {allocation_request.dca_id}. Reason: {allocation_request.allocation_reason}",
-            note_type="allocation"
+    case = DEMO_CASES[case_index]
+    
+    # Check permissions
+    if current_user["role"] == "enterprise_admin" and case["enterprise_id"] != current_user["enterprise_id"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    if current_user["role"] == "dca_user" and case["assigned_dca_id"] != current_user["dca_id"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    changes: Dict[str, Any] = {}
+    
+    # Update case
+    new_status = case_update.status or case.get("status")
+
+    if new_status in ["resolved", "recovered"]:
+        if not (case_update.proof_type and case_update.proof_reference):
+            raise HTTPException(
+                status_code=400,
+                detail="proof_type and proof_reference are required when marking a case as resolved or recovered",
+            )
+
+    if case_update.status:
+        changes["status"] = {"from": case.get("status"), "to": case_update.status}
+        case["status"] = case_update.status
+    if case_update.remarks is not None:
+        changes["remarks"] = {"from": case.get("remarks"), "to": case_update.remarks}
+        case["remarks"] = case_update.remarks
+    if case_update.assigned_dca_id is not None:
+        if current_user["role"] not in ["enterprise_admin", "super_admin"]:
+            raise HTTPException(status_code=403, detail="Access denied")
+        changes["assigned_dca_id"] = {
+            "from": case.get("assigned_dca_id"),
+            "to": case_update.assigned_dca_id,
+        }
+        case["assigned_dca_id"] = case_update.assigned_dca_id
+
+    if case_update.proof_type is not None:
+        changes["proof_type"] = {"from": case.get("proof_type"), "to": case_update.proof_type}
+        case["proof_type"] = case_update.proof_type
+    if case_update.proof_reference is not None:
+        changes["proof_reference"] = {
+            "from": case.get("proof_reference"),
+            "to": case_update.proof_reference,
+        }
+        case["proof_reference"] = case_update.proof_reference
+    
+    case["updated_at"] = datetime.now().isoformat()
+    DEMO_CASES[case_index] = case
+
+    if changes:
+        log_audit_event(current_user, "case_updated", case=case, details=changes)
+    
+    return case
+
+@router.get("/dashboard/kpis", response_model=KPI)
+def get_kpis(current_user: dict = Depends(get_current_user)):
+    if current_user["role"] != "super_admin":
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    total_cases = len(DEMO_CASES)
+    resolved_cases = len([c for c in DEMO_CASES if c["status"] == "resolved"])
+    overdue_cases = len([c for c in DEMO_CASES if datetime.fromisoformat(c["sla_deadline"]) < datetime.now()])
+    high_priority = len([c for c in DEMO_CASES if c["priority"] in ["high", "critical"]])
+    
+    return KPI(
+        total_cases=total_cases,
+        total_dcas=len(DEMO_DCAS),
+        total_enterprises=len(DEMO_ENTERPRISES),
+        overall_recovery_rate=int((resolved_cases / total_cases) * 100) if total_cases > 0 else 0,
+        sla_breaches=overdue_cases,
+        high_priority_cases=high_priority
+    )
+
+@router.get("/dashboard/dcas", response_model=List[DCA])
+def get_dcas(current_user: dict = Depends(get_current_user)):
+    results: List[DCA] = []
+    for dca in DEMO_DCAS:
+        dca_cases = [c for c in DEMO_CASES if c["assigned_dca_id"] == dca["id"]]
+
+        active_cases = len(
+            [c for c in dca_cases if c["status"] in ["pending", "in_progress", "contacted", "promised"]]
         )
-        db.add(note)
-        
-        allocated.append(case_id)
-    
-    db.commit()
-    
-    return {
-        "allocated": allocated,
-        "failed": failed,
-        "total_allocated": len(allocated)
-    }
+        resolved_cases = len(
+            [c for c in dca_cases if c["status"] in ["recovered", "resolved"]]
+        )
+        recovered_amount = sum(
+            c["amount"] for c in dca_cases if c["status"] in ["recovered", "resolved"]
+        )
 
-@router.get("/dashboard/stats")
-async def get_dashboard_stats(
-    db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user)
-):
-    """Get dashboard statistics"""
-    from sqlalchemy import func, case as sql_case
-    
-    # Base query
-    query = db.query(Case)
-    
-    # Apply role-based filtering
-    if current_user["role"] == "dca_agent":
-        query = query.filter(Case.dca_id == current_user.get("dca_id"))
-    elif current_user["role"] == "collection_manager":
-        if current_user.get("dca_id"):
-            query = query.filter(Case.dca_id == current_user.get("dca_id"))
-    
-    # Calculate stats
-    total_cases = query.count()
-    
-    active_cases = query.filter(
-        Case.status.in_([CaseStatus.NEW, CaseStatus.ASSIGNED, CaseStatus.IN_PROGRESS])
-    ).count()
-    
-    total_amount = query.with_entities(func.sum(Case.original_amount)).scalar() or 0
-    
-    recovered_amount = query.filter(
-        Case.status == CaseStatus.RESOLVED
-    ).with_entities(
-        func.sum(Case.original_amount - Case.current_amount)
-    ).scalar() or 0
-    
-    # SLA compliance
-    sla_compliant = query.filter(
-        Case.sla_breached == False,
-        Case.status.in_([CaseStatus.ASSIGNED, CaseStatus.IN_PROGRESS, CaseStatus.RESOLVED])
-    ).count()
-    
-    sla_total = query.filter(
-        Case.status.in_([CaseStatus.ASSIGNED, CaseStatus.IN_PROGRESS, CaseStatus.RESOLVED])
-    ).count() or 1
-    
-    # Cases by status
-    status_counts = {}
-    for status in CaseStatus:
-        count = query.filter(Case.status == status).count()
-        status_counts[status.value] = count
-    
-    # Cases by priority
-    priority_counts = {}
-    for priority in CasePriority:
-        count = query.filter(Case.priority == priority).count()
-        priority_counts[priority.value] = count
-    
-    return {
-        "total_cases": total_cases,
-        "active_cases": active_cases,
-        "total_amount": float(total_amount),
-        "recovered_amount": float(recovered_amount),
-        "recovery_rate": (recovered_amount / total_amount * 100) if total_amount > 0 else 0,
-        "sla_compliance_rate": (sla_compliant / sla_total * 100),
-        "cases_by_status": status_counts,
-        "cases_by_priority": priority_counts,
-        "avg_recovery_score": query.with_entities(func.avg(Case.recovery_score)).scalar() or 0
+        durations: List[float] = []
+        for c in dca_cases:
+            if c["status"] in ["recovered", "resolved"]:
+                try:
+                    created_at = datetime.fromisoformat(c["created_at"])
+                    updated_at = datetime.fromisoformat(c["updated_at"])
+                    delta_days = (updated_at - created_at).total_seconds() / 86400.0
+                    if delta_days >= 0:
+                        durations.append(delta_days)
+                except Exception:
+                    continue
+
+        avg_resolution_days: Optional[float] = None
+        if durations:
+            avg_resolution_days = round(sum(durations) / len(durations), 1)
+
+        results.append(
+            DCA(
+                id=dca["id"],
+                name=dca["name"],
+                contact_email=dca.get("contact_email")
+                or f"contact@{dca['name'].lower().replace(' ', '')}.com",
+                performance_score=dca["performance_score"],
+                active_cases=active_cases,
+                resolved_cases=resolved_cases,
+                sla_breaches=dca["sla_breaches"],
+                recovered_amount=recovered_amount,
+                average_resolution_days=avg_resolution_days,
+            )
+        )
+
+    return results
+
+
+@router.post("/dashboard/dcas", response_model=DCA)
+def create_dca(dca_in: DCACreate, current_user: dict = Depends(get_current_user)):
+    if current_user["role"] not in ["super_admin", "enterprise_admin"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    dca_id = str(uuid.uuid4())
+    contact_email = dca_in.contact_email or f"contact@{dca_in.name.lower().replace(' ', '')}.com"
+    performance_score = dca_in.performance_score if dca_in.performance_score is not None else 80
+
+    dca = {
+        "id": dca_id,
+        "name": dca_in.name,
+        "contact_email": contact_email,
+        "performance_score": performance_score,
+        "active_cases": 0,
+        "resolved_cases": 0,
+        "sla_breaches": 0,
     }
+    DEMO_DCAS.append(dca)
+
+    return DCA(
+        id=dca_id,
+        name=dca_in.name,
+        contact_email=contact_email,
+        performance_score=performance_score,
+        active_cases=0,
+        resolved_cases=0,
+        sla_breaches=0,
+    )
+
+@router.post("/cases/upload")
+async def upload_cases(current_user: dict = Depends(get_current_user)):
+    """
+    Handle bulk case upload (demo endpoint)
+    In a real app, this would process uploaded files and create cases
+    """
+    if current_user["role"] not in ["enterprise_admin", "super_admin"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # For demo purposes, generate some new cases
+    import uuid
+    from datetime import datetime, timedelta
+    import random
+    
+    new_cases = []
+    for i in range(3):
+        case_id = str(uuid.uuid4())
+        amount = random.randint(1000, 25000)
+        sla_deadline_dt = datetime.now() + timedelta(days=random.randint(7, 30))
+        priority, ai_score = compute_case_risk(amount, sla_deadline_dt)
+        assigned_dca_id = select_dca_for_case(priority)
+
+        case = {
+            "id": case_id,
+            "borrower_name": f"Uploaded Case {i+1}",
+            "borrower_email": f"uploaded{i+1}@example.com",
+            "borrower_phone": f"+1-555-{random.randint(1000, 9999)}",
+            "amount": amount,
+            "status": "pending",
+            "priority": priority,
+            "ai_score": ai_score,
+            "sla_deadline": sla_deadline_dt.isoformat(),
+            "assigned_dca_id": assigned_dca_id,
+            "enterprise_id": current_user["enterprise_id"] or "ent-001",
+            "created_at": datetime.now().isoformat(),
+            "updated_at": datetime.now().isoformat(),
+            "remarks": "Uploaded via bulk import"
+        }
+        new_cases.append(case)
+        DEMO_CASES.append(case)
+        log_audit_event(current_user, "case_uploaded", case=case, details={"source": "bulk_import"})
+    
+    return {"message": f"Successfully uploaded {len(new_cases)} cases", "cases": new_cases}
+
+@router.post("/cases/upload-csv")
+async def upload_cases_csv(file: UploadFile = File(...), current_user: dict = Depends(get_current_user)):
+    if current_user["role"] not in ["enterprise_admin", "super_admin"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    raw = await file.read()
+    try:
+        text = raw.decode("utf-8-sig")
+    except Exception:
+        raise HTTPException(status_code=400, detail="CSV must be UTF-8 encoded")
+
+    reader = csv.DictReader(io.StringIO(text))
+    if not reader.fieldnames:
+        raise HTTPException(status_code=400, detail="CSV missing header row")
+
+    now = datetime.now()
+    new_cases: List[dict] = []
+
+    for idx, row in enumerate(reader):
+        borrower_name = (row.get("borrower_name") or "").strip()
+        if not borrower_name:
+            raise HTTPException(status_code=400, detail=f"Row {idx + 2}: borrower_name is required")
+
+        amount_raw = (row.get("amount") or "").strip()
+        if not amount_raw:
+            raise HTTPException(status_code=400, detail=f"Row {idx + 2}: amount is required")
+        try:
+            amount = int(float(amount_raw))
+        except Exception:
+            raise HTTPException(status_code=400, detail=f"Row {idx + 2}: amount must be a number")
+
+        borrower_email = (row.get("borrower_email") or f"{borrower_name.lower().replace(' ', '.')}@example.com").strip()
+        borrower_phone = (row.get("borrower_phone") or f"+1-555-{random.randint(100, 999)}-{random.randint(1000, 9999)}").strip()
+
+        status = (row.get("status") or "pending").strip() or "pending"
+
+        sla_deadline_raw = (row.get("sla_deadline") or "").strip()
+        if sla_deadline_raw:
+            try:
+                sla_deadline_dt = datetime.fromisoformat(sla_deadline_raw)
+                sla_deadline = sla_deadline_raw
+            except Exception:
+                raise HTTPException(status_code=400, detail=f"Row {idx + 2}: sla_deadline must be ISO datetime")
+        else:
+            sla_deadline_dt = now + timedelta(days=random.randint(7, 30))
+            sla_deadline = sla_deadline_dt.isoformat()
+
+        priority, ai_score = compute_case_risk(amount, sla_deadline_dt)
+
+        assigned_dca_id = (row.get("assigned_dca_id") or "").strip()
+        if not assigned_dca_id:
+            assigned_dca_id = select_dca_for_case(priority)
+
+        if current_user["role"] == "enterprise_admin" and current_user.get("enterprise_id"):
+            enterprise_id = current_user["enterprise_id"]
+        else:
+            enterprise_id = (row.get("enterprise_id") or "").strip() or current_user.get("enterprise_id") or "ent-001"
+
+        remarks = (row.get("remarks") or "").strip() or "Uploaded via CSV"
+
+        case = {
+            "id": str(uuid.uuid4()),
+            "borrower_name": borrower_name,
+            "borrower_email": borrower_email,
+            "borrower_phone": borrower_phone,
+            "amount": amount,
+            "status": status,
+            "priority": priority,
+            "ai_score": ai_score,
+            "sla_deadline": sla_deadline,
+            "assigned_dca_id": assigned_dca_id,
+            "enterprise_id": enterprise_id,
+            "created_at": now.isoformat(),
+            "updated_at": now.isoformat(),
+            "remarks": remarks,
+        }
+
+        DEMO_CASES.append(case)
+        new_cases.append(case)
+        log_audit_event(current_user, "case_uploaded_csv", case=case, details={"filename": file.filename})
+
+    return {"message": f"Successfully uploaded {len(new_cases)} cases from CSV", "cases": new_cases}
+
+@router.get("/audit", response_model=List[AuditEvent])
+def get_audit_events(
+    case_id: Optional[str] = Query(None),
+    limit: Optional[int] = Query(50),
+    current_user: dict = Depends(get_current_user),
+):
+    events = AUDIT_LOG.copy()
+
+    if current_user["role"] == "enterprise_admin" and current_user["enterprise_id"]:
+        events = [e for e in events if e.get("enterprise_id") == current_user["enterprise_id"]]
+    elif current_user["role"] == "dca_user" and current_user["dca_id"]:
+        events = [e for e in events if e.get("dca_id") == current_user["dca_id"]]
+
+    if case_id:
+        events = [e for e in events if e.get("case_id") == case_id]
+
+    events.sort(key=lambda e: e.get("at", ""), reverse=True)
+
+    if limit:
+        events = events[:limit]
+
+    return events
+
+@router.get("/dashboard/enterprises", response_model=List[Enterprise])
+def get_enterprises(current_user: dict = Depends(get_current_user)):
+    if current_user["role"] != "super_admin":
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    enterprises = []
+    for ent in DEMO_ENTERPRISES:
+        ent_cases = [c for c in DEMO_CASES if c["enterprise_id"] == ent["id"]]
+        total_cases = len(ent_cases)
+        active_cases = len([c for c in ent_cases if c["status"] in ["pending", "in_progress", "contacted"]])
+        resolved_cases = len([c for c in ent_cases if c["status"] == "resolved"])
+        
+        enterprises.append(Enterprise(
+            id=ent["id"],
+            name=ent["name"],
+            total_cases=total_cases,
+            active_cases=active_cases,
+            resolved_cases=resolved_cases,
+            recovery_rate=int((resolved_cases / total_cases) * 100) if total_cases > 0 else 0
+        ))
+    
+    return enterprises

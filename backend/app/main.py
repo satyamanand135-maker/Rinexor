@@ -1,11 +1,26 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-import logging
 from datetime import datetime
+from app.api import auth, cases
+from app.api.auth import DEMO_USERS
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+app = FastAPI(title="Rinexor API", description="DCA Management Platform API")
+
+# Enable CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:5174",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 app = FastAPI(
     title="Rinexor API",
@@ -60,38 +75,11 @@ async def startup_event():
 
 @app.get("/")
 def root():
-    return {
-        "status": "running",
-        "service": "Rinexor Backend",
-        "version": "1.0.0",
-        "docs": "/api/docs",
-        "health": "/api/health"
-    }
+    return {"status": "Rinexor backend running", "docs": "/docs"}
 
-@app.get("/api/health")
-def health_check():
-    """Health check endpoint"""
-    return {
-        "status": "healthy",
-        "timestamp": datetime.utcnow().isoformat(),
-        "service": "rinexor-backend",
-        "version": "1.0.0"
-    }
-
-# Import and include routers
-try:
-    from app.api import auth, cases, dcas, admin, ai, reports
-    
-    app.include_router(auth.router, prefix="/api/v1/auth", tags=["authentication"])
-    app.include_router(cases.router, prefix="/api/v1/cases", tags=["cases"])
-    app.include_router(dcas.router, prefix="/api/v1/dcas", tags=["dcas"])
-    app.include_router(admin.router, prefix="/api/v1/admin", tags=["admin"])
-    app.include_router(ai.router, prefix="/api/v1/ai", tags=["ai"])
-    app.include_router(reports.router, prefix="/api/v1/reports", tags=["reports"])
-    
-    logger.info("✅ All API routers loaded")
-except ImportError as e:
-    logger.error(f"❌ Failed to load API routers: {e}")
+@app.get("/api/debug/users")
+def debug_users():
+    return {"users": list(DEMO_USERS.keys()), "count": len(DEMO_USERS)}
 
 # For running directly
 if __name__ == "__main__":

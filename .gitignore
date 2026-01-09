@@ -9,8 +9,14 @@ venv/
 .env
 *.env
 
-# Database
+# Node
+node_modules/
+dist/
+.vite/
+
+# Database files
 *.db
+*.sqlite
 *.sqlite3
 
 # Logs
