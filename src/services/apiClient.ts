@@ -77,34 +77,12 @@ interface KPI {
 
 class ApiClient {
     private token: string | null = null;
-    private _useMockData: boolean | null = null; // null = not yet checked
 
     constructor() {
         this.token = localStorage.getItem('rinexor_token');
     }
 
-    /** Check if backend is reachable; cache result */
-    private async shouldUseMockData(): Promise<boolean> {
-        if (this._useMockData !== null) return this._useMockData;
-        try {
-            const controller = new AbortController();
-            const timeout = setTimeout(() => controller.abort(), 3000);
-            const res = await fetch(`${API_BASE_URL}/auth/login`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email: 'probe', password: 'probe' }),
-                signal: controller.signal,
-            });
-            clearTimeout(timeout);
-            // A real backend returns JSON (even error responses). Vercel returns HTML 404.
-            const contentType = res.headers.get('content-type') || '';
-            this._useMockData = !contentType.includes('application/json');
-        } catch {
-            this._useMockData = true;
-        }
-        return this._useMockData;
-    }
-
+    /** Make a real API request — throws on any error */
     private async request<T>(
         endpoint: string,
         options: RequestInit = {}
@@ -126,9 +104,14 @@ class ApiClient {
         if (!response.ok) {
             if (response.status === 401) {
                 this.logout();
-                throw new Error('Authentication required');
             }
             throw new Error(`API Error: ${response.statusText}`);
+        }
+
+        // Verify response is JSON (not Vercel 404 HTML page)
+        const contentType = response.headers.get('content-type') || '';
+        if (!contentType.includes('application/json')) {
+            throw new Error('Not a JSON API response');
         }
 
         return response.json();
@@ -136,9 +119,18 @@ class ApiClient {
 
     // ─── Authentication ───
     async login(email: string, password: string): Promise<LoginResponse> {
-        const useMock = await this.shouldUseMockData();
+        // Try real backend first
+        try {
+            const response = await this.request<LoginResponse>('/auth/login', {
+                method: 'POST',
+                body: JSON.stringify({ email, password }),
+            });
 
-        if (useMock) {
+            this.token = response.access_token;
+            localStorage.setItem('rinexor_token', response.access_token);
+            return response;
+        } catch {
+            // Backend unavailable — use demo credentials
             const demoUser = DEMO_USERS[email.toLowerCase()];
             if (demoUser && demoUser.password === password) {
                 const mockToken = 'demo-token-' + btoa(email);
@@ -152,16 +144,6 @@ class ApiClient {
             }
             throw new Error('Invalid credentials');
         }
-
-        const response = await this.request<LoginResponse>('/auth/login', {
-            method: 'POST',
-            body: JSON.stringify({ email, password }),
-        });
-
-        this.token = response.access_token;
-        localStorage.setItem('rinexor_token', response.access_token);
-
-        return response;
     }
 
     async getProfile(): Promise<User> {
@@ -170,7 +152,6 @@ class ApiClient {
 
     logout(): void {
         this.token = null;
-        this._useMockData = null; // reset for next session
         localStorage.removeItem('rinexor_token');
         localStorage.removeItem('rinexor_user');
     }
@@ -199,56 +180,63 @@ class ApiClient {
         status?: string;
         limit?: number;
     }): Promise<BackendCase[]> {
-        const useMock = await this.shouldUseMockData();
-        if (useMock) return MOCK_BACKEND_CASES as BackendCase[];
-
-        const params = new URLSearchParams();
-        if (filters) {
-            Object.entries(filters).forEach(([key, value]) => {
-                if (value) params.append(key, String(value));
-            });
+        try {
+            const params = new URLSearchParams();
+            if (filters) {
+                Object.entries(filters).forEach(([key, value]) => {
+                    if (value) params.append(key, String(value));
+                });
+            }
+            return await this.request<BackendCase[]>(`/cases?${params}`);
+        } catch {
+            return MOCK_BACKEND_CASES as BackendCase[];
         }
-        return this.request<BackendCase[]>(`/cases?${params}`);
     }
 
     async getCase(caseId: string): Promise<BackendCase> {
-        const useMock = await this.shouldUseMockData();
-        if (useMock) {
+        try {
+            return await this.request<BackendCase>(`/cases/${caseId}`);
+        } catch {
             const found = MOCK_BACKEND_CASES.find(c => c.id === caseId);
             return (found || MOCK_BACKEND_CASES[0]) as BackendCase;
         }
-        return this.request<BackendCase>(`/cases/${caseId}`);
     }
 
     async updateCase(caseId: string, updates: Partial<BackendCase>): Promise<BackendCase> {
-        const useMock = await this.shouldUseMockData();
-        if (useMock) {
+        try {
+            return await this.request<BackendCase>(`/cases/${caseId}`, {
+                method: 'PUT',
+                body: JSON.stringify(updates),
+            });
+        } catch {
             const found = MOCK_BACKEND_CASES.find(c => c.id === caseId);
             return { ...(found || MOCK_BACKEND_CASES[0]), ...updates } as BackendCase;
         }
-        return this.request<BackendCase>(`/cases/${caseId}`, {
-            method: 'PUT',
-            body: JSON.stringify(updates),
-        });
     }
 
     async uploadCases(): Promise<{ message: string; cases: BackendCase[] }> {
-        const useMock = await this.shouldUseMockData();
-        if (useMock) return { message: 'Demo: 8 cases uploaded', cases: MOCK_BACKEND_CASES as BackendCase[] };
-        return this.request('/cases/upload', { method: 'POST' });
+        try {
+            return await this.request('/cases/upload', { method: 'POST' });
+        } catch {
+            return { message: 'Demo: 8 cases uploaded', cases: MOCK_BACKEND_CASES as BackendCase[] };
+        }
     }
 
     // ─── Dashboard ───
     async getKPIs(): Promise<KPI> {
-        const useMock = await this.shouldUseMockData();
-        if (useMock) return MOCK_KPI;
-        return this.request<KPI>('/dashboard/kpis');
+        try {
+            return await this.request<KPI>('/dashboard/kpis');
+        } catch {
+            return MOCK_KPI;
+        }
     }
 
     async getDCAs(): Promise<DCA[]> {
-        const useMock = await this.shouldUseMockData();
-        if (useMock) return MOCK_DCAS;
-        return this.request<DCA[]>('/dashboard/dcas');
+        try {
+            return await this.request<DCA[]>('/dashboard/dcas');
+        } catch {
+            return MOCK_DCAS;
+        }
     }
 
     // ─── AI Analysis ───
@@ -260,8 +248,12 @@ class ApiClient {
         risk_factors: string[];
         recommended_action: string;
     }> {
-        const useMock = await this.shouldUseMockData();
-        if (useMock) {
+        try {
+            return await this.request('/ai/analyze-case', {
+                method: 'POST',
+                body: JSON.stringify(caseData),
+            });
+        } catch {
             return {
                 recovery_probability: 0.72,
                 recovery_score: 78,
@@ -271,10 +263,6 @@ class ApiClient {
                 recommended_action: 'Escalate to senior agent with restructured payment plan',
             };
         }
-        return this.request('/ai/analyze-case', {
-            method: 'POST',
-            body: JSON.stringify(caseData),
-        });
     }
 
     async getModelStatus(): Promise<{
@@ -282,23 +270,27 @@ class ApiClient {
         using_rule_based: boolean;
         message: string;
     }> {
-        const useMock = await this.shouldUseMockData();
-        if (useMock) {
+        try {
+            return await this.request('/ai/model-status');
+        } catch {
             return { model_trained: true, using_rule_based: false, message: 'Demo mode – AI model simulated' };
         }
-        return this.request('/ai/model-status');
     }
 
     // ─── Dashboard Analytics (real data from DB) ───
     async getDashboardKPIs(): Promise<DashboardKPIs> {
-        const useMock = await this.shouldUseMockData();
-        if (useMock) return MOCK_DASHBOARD_KPIS;
-        return this.request<DashboardKPIs>('/reports/dashboard/kpis');
+        try {
+            return await this.request<DashboardKPIs>('/reports/dashboard/kpis');
+        } catch {
+            return MOCK_DASHBOARD_KPIS;
+        }
     }
 
     async getRecoveryChart(months?: number): Promise<RecoveryChartData> {
-        const useMock = await this.shouldUseMockData();
-        if (useMock) {
+        try {
+            const params = months ? `?months=${months}` : '';
+            return await this.request<RecoveryChartData>(`/reports/dashboard/recovery-chart${params}`);
+        } catch {
             if (months && months < MOCK_RECOVERY_CHART.chart_data.length) {
                 return {
                     ...MOCK_RECOVERY_CHART,
@@ -307,26 +299,26 @@ class ApiClient {
             }
             return MOCK_RECOVERY_CHART;
         }
-        const params = months ? `?months=${months}` : '';
-        return this.request<RecoveryChartData>(`/reports/dashboard/recovery-chart${params}`);
     }
 
     async getTopDCAs(limit?: number): Promise<TopDCAsResponse> {
-        const useMock = await this.shouldUseMockData();
-        if (useMock) {
+        try {
+            const params = limit ? `?limit=${limit}` : '';
+            return await this.request<TopDCAsResponse>(`/reports/dashboard/top-dcas${params}`);
+        } catch {
             if (limit) {
                 return { top_dcas: MOCK_TOP_DCAS.top_dcas.slice(0, limit) };
             }
             return MOCK_TOP_DCAS;
         }
-        const params = limit ? `?limit=${limit}` : '';
-        return this.request<TopDCAsResponse>(`/reports/dashboard/top-dcas${params}`);
     }
 
     async getReportsData(): Promise<ReportsData> {
-        const useMock = await this.shouldUseMockData();
-        if (useMock) return MOCK_REPORTS_DATA;
-        return this.request<ReportsData>('/reports/dashboard/reports-data');
+        try {
+            return await this.request<ReportsData>('/reports/dashboard/reports-data');
+        } catch {
+            return MOCK_REPORTS_DATA;
+        }
     }
 }
 
