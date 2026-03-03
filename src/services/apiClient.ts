@@ -90,12 +90,15 @@ class ApiClient {
             const controller = new AbortController();
             const timeout = setTimeout(() => controller.abort(), 3000);
             const res = await fetch(`${API_BASE_URL}/auth/login`, {
-                method: 'OPTIONS',
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: 'probe', password: 'probe' }),
                 signal: controller.signal,
             });
             clearTimeout(timeout);
-            // If we get any response (even 405), the backend is alive
-            this._useMockData = !res.ok && res.status === 0;
+            // A real backend returns JSON (even error responses). Vercel returns HTML 404.
+            const contentType = res.headers.get('content-type') || '';
+            this._useMockData = !contentType.includes('application/json');
         } catch {
             this._useMockData = true;
         }
