@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, BarChart, Bar, Legend } from 'recharts';
+import { useEffect, useMemo, useState } from 'react';
+import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, BarChart, Bar } from 'recharts';
 import { TrendingUp, AlertCircle, DollarSign, FileText, Users, ArrowUpRight, Loader2 } from 'lucide-react';
 import { apiClient } from '../../services/apiClient';
 import type { DashboardKPIs } from '../../services/apiClient';

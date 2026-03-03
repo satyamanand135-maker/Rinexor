@@ -24,7 +24,7 @@ export default function Overview() {
         ]);
         setKpiData(kpis);
         // Normalize recovery data to ₹K
-        const normalized = [...recovery.chart_data, ...recovery.forecast_data].map(d => ({
+        const normalized = [...recovery.chart_data, ...recovery.forecast_data].map((d: any) => ({
           ...d,
           recovery: d.recovery != null ? Math.round(d.recovery / 1000) : null,
           forecast: d.forecast != null ? Math.round(d.forecast / 1000) : null,
