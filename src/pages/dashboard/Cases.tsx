@@ -1,26 +1,13 @@
 import { useMemo, useState } from 'react';
-import { Search, Filter, MoreHorizontal, Clock, AlertTriangle, ArrowUpRight } from 'lucide-react';
+import { Search, Filter, MoreHorizontal, Clock, AlertTriangle, ArrowUpRight, X, Plus } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { useCases, type SLAStatus, type CaseRow } from '../../context/CaseContext';
 
-type SLAStatus = 'on_track' | 'at_risk' | 'breached';
 type PriorityFilter = 'all' | 'high' | 'medium' | 'low';
-
-type CaseRow = {
-  id: string;
-  customer: string;
-  enterprise?: string;
-  amount: string;
-  agency?: string;
-  agent?: string;
-  score: number;
-  sla: string;
-  slaStatus: SLAStatus;
-  status: string;
-  createdAt: string; // YYYY-MM-DD
-};
 
 export default function Cases() {
   const { user } = useAuth();
+  const { cases: allCases, addCase, updateCase } = useCases();
   const [activeTab, setActiveTab] = useState<'all' | 'active' | 'high-priority' | 'overdue' | 'closed'>('all');
   const [query, setQuery] = useState('');
   const [dateFrom, setDateFrom] = useState('');
@@ -28,6 +15,49 @@ export default function Cases() {
   const [enterpriseFilter, setEnterpriseFilter] = useState('all');
   const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>('all');
   const [slaFilter, setSlaFilter] = useState<'all' | SLAStatus>('all');
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 10;
+
+  // ─── New Case Modal State ───
+  const [showNewCase, setShowNewCase] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const [newCase, setNewCase] = useState({
+    customer: '', enterprise: '', amount: '', agency: '', agent: '',
+    score: 75, slaDays: 7, status: 'Active',
+  });
+
+  // ─── DCA Agent Modals ───
+  const [statusModal, setStatusModal] = useState<string | null>(null);
+  const [notesModal, setNotesModal] = useState<string | null>(null);
+  const [proofModal, setProofModal] = useState<string | null>(null);
+  const [selectedStatus, setSelectedStatus] = useState('In Progress');
+  const [noteText, setNoteText] = useState('');
+  const [proofFile, setProofFile] = useState<string | null>(null);
+
+  const createNewCase = () => {
+    if (!newCase.customer.trim() || !newCase.amount.trim()) return;
+    const caseId = `CS-${9000 + allCases.length + Math.floor(Math.random() * 100)}`;
+    const slaLabel = newCase.slaDays <= 1 ? `${newCase.slaDays * 24}h Left` : `${newCase.slaDays} Days Left`;
+    const slaStatus: SLAStatus = newCase.slaDays <= 1 ? 'at_risk' : newCase.slaDays <= 0 ? 'breached' : 'on_track';
+    const row: CaseRow = {
+      id: caseId,
+      customer: newCase.customer,
+      enterprise: newCase.enterprise || 'TechFlow',
+      amount: `₹${newCase.amount}`,
+      agency: newCase.agency || 'Unassigned',
+      agent: newCase.agent || 'Unassigned',
+      score: newCase.score,
+      sla: slaLabel,
+      slaStatus,
+      status: newCase.status,
+      createdAt: new Date().toISOString().split('T')[0],
+    };
+    addCase(row);
+    setShowNewCase(false);
+    setNewCase({ customer: '', enterprise: '', amount: '', agency: '', agent: '', score: 75, slaDays: 7, status: 'Active' });
+    setToast(`Case ${caseId} created successfully`);
+    setTimeout(() => setToast(null), 3000);
+  };
 
   const getColumns = () => {
     if (user?.role === 'super_admin') {
@@ -51,7 +81,6 @@ export default function Cases() {
         { header: 'Status', key: 'status' },
       ];
     } else {
-      // DCA Agent
       return [
         { header: 'Case ID', key: 'id' },
         { header: 'Customer', key: 'customer' },
@@ -63,33 +92,17 @@ export default function Cases() {
     }
   };
 
-  const getCases = (): CaseRow[] => {
-    const commonData: CaseRow[] = [
-      { id: 'CS-8921', customer: 'Acme Corp', enterprise: 'TechFlow', amount: '$45,200', agency: 'Global Collections', agent: 'Agent Ayesha', score: 92, sla: '2 Days Left', slaStatus: 'on_track', status: 'In Progress', createdAt: '2025-12-18' },
-      { id: 'CS-8922', customer: 'TechFlow Inc', enterprise: 'TechFlow', amount: '$12,850', agency: 'Alpha Recoveries', agent: 'Agent Rohan', score: 74, sla: '5 Days Left', slaStatus: 'on_track', status: 'Negotiating', createdAt: '2025-12-22' },
-      { id: 'CS-8923', customer: 'Stark Ind', enterprise: 'Stark Ind', amount: '$112,000', agency: 'Summit Financial', agent: 'Agent Sana', score: 98, sla: 'Overdue', slaStatus: 'breached', status: 'Escalated', createdAt: '2025-11-29' },
-      { id: 'CS-8924', customer: 'Wayne Ent', enterprise: 'TechFlow', amount: '$8,500', agency: 'Global Collections', agent: 'Unassigned', score: 65, sla: '10 Days Left', slaStatus: 'on_track', status: 'Active', createdAt: '2025-12-28' },
-      { id: 'CS-8925', customer: 'Cyberdyne', enterprise: 'Stark Ind', amount: '$156,000', agency: 'Global Collections', agent: 'Agent Meera', score: 88, sla: '1 Day Left', slaStatus: 'at_risk', status: 'In Progress', createdAt: '2025-12-10' },
-      { id: 'CS-8926', customer: 'Massive Dynamic', enterprise: 'TechFlow', amount: '$23,400', agency: 'Alpha Recoveries', agent: 'Agent Vikram', score: 45, sla: '15 Days Left', slaStatus: 'on_track', status: 'Active', createdAt: '2025-12-05' },
-      { id: 'CS-8927', customer: 'Hooli', enterprise: 'Stark Ind', amount: '$67,000', agency: 'Summit Financial', score: 82, sla: '3 Days Left', slaStatus: 'on_track', status: 'Negotiating', createdAt: '2025-12-12' },
-      { id: 'CS-8928', customer: 'Umbrella Health', enterprise: 'BioNova', amount: '$18,900', agency: 'Zenith Partners', score: 90, sla: '6h Left', slaStatus: 'at_risk', status: 'In Progress', createdAt: '2025-12-30' },
-      { id: 'CS-8929', customer: 'Globex', enterprise: 'BioNova', amount: '$9,250', agency: 'Apex Solutions', score: 33, sla: '12 Days Left', slaStatus: 'on_track', status: 'Active', createdAt: '2025-12-02' },
-      { id: 'CS-8930', customer: 'Initech', enterprise: 'TechFlow', amount: '$6,500', agency: 'Global Collections', score: 58, sla: 'Closed', slaStatus: 'on_track', status: 'Closed', createdAt: '2025-10-14' },
-    ];
-
+  const cases = useMemo(() => {
     if (user?.role === 'enterprise_admin') {
-      return commonData.filter((c) => c.enterprise === 'TechFlow');
+      return allCases.filter((c) => c.enterprise === 'TechFlow');
     }
-
     if (user?.role === 'dca_agent') {
-      return commonData.filter((c) => c.agency === 'Global Collections');
+      return allCases.filter((c) => c.agency === 'Global Collections');
     }
-
-    return commonData;
-  };
+    return allCases;
+  }, [allCases, user?.role]);
 
   const columns = getColumns();
-  const cases = getCases();
 
   const enterprises = useMemo(() => {
     const list = Array.from(new Set(cases.map((c) => c.enterprise).filter(Boolean) as string[]));
@@ -144,6 +157,12 @@ export default function Cases() {
     return rows;
   }, [activeTab, cases, dateFrom, dateTo, enterpriseFilter, priorityFilter, query, slaFilter, user?.role]);
 
+  const totalPages = Math.ceil(filteredCases.length / ITEMS_PER_PAGE);
+  const paginatedCases = useMemo(() => {
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+    return filteredCases.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  }, [filteredCases, currentPage]);
+
   const baseCounts = useMemo(() => {
     const all = cases;
     return {
@@ -175,26 +194,227 @@ export default function Cases() {
 
   return (
     <div className="space-y-6">
+      {/* Toast */}
+      {toast && <div className="fixed top-6 right-6 z-50 px-4 py-3 rounded-lg shadow-lg bg-green-600 text-white text-sm font-medium">{toast}</div>}
+
+      {/* ─── Update Status Modal ─── */}
+      {statusModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm mx-4 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold text-slate-900">Update Status — {statusModal}</h3>
+              <button type="button" onClick={() => setStatusModal(null)} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
+            </div>
+            <select value={selectedStatus} onChange={e => setSelectedStatus(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white mb-4">
+              <option>Active</option>
+              <option>In Progress</option>
+              <option>Negotiating</option>
+              <option>Resolved</option>
+              <option>Escalated</option>
+              <option>Closed</option>
+            </select>
+            <button type="button" onClick={() => {
+              updateCase(statusModal, { status: selectedStatus });
+              setToast(`${statusModal} status updated to "${selectedStatus}"`);
+              setTimeout(() => setToast(null), 3000);
+              setStatusModal(null);
+            }}
+              className="w-full px-4 py-2.5 bg-brand-navy text-white rounded-lg text-sm font-medium hover:bg-slate-800">
+              Save Status
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Add Notes Modal ─── */}
+      {notesModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold text-slate-900">Add Note — {notesModal}</h3>
+              <button type="button" onClick={() => { setNotesModal(null); setNoteText(''); }} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
+            </div>
+            {/* Show existing notes */}
+            {(() => {
+              try {
+                const existing: { text: string; time: string }[] = JSON.parse(localStorage.getItem(`rinexor_notes_${notesModal}`) || '[]');
+                if (existing.length > 0) return (
+                  <div className="mb-4 max-h-32 overflow-y-auto space-y-2">
+                    {existing.map((n, i) => (
+                      <div key={i} className="p-2 bg-slate-50 rounded-lg text-xs">
+                        <span className="text-slate-400">{n.time}</span>
+                        <p className="text-slate-700 mt-0.5">{n.text}</p>
+                      </div>
+                    ))}
+                  </div>
+                );
+              } catch { /* ignore */ }
+              return null;
+            })()}
+            <textarea value={noteText} onChange={e => setNoteText(e.target.value)} rows={3}
+              placeholder="Add a note about this case..." className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm mb-4 resize-none" />
+            <button type="button" disabled={!noteText.trim()} onClick={() => {
+              const key = `rinexor_notes_${notesModal}`;
+              const existing = JSON.parse(localStorage.getItem(key) || '[]');
+              existing.push({ text: noteText, time: new Date().toLocaleString() });
+              localStorage.setItem(key, JSON.stringify(existing));
+              setToast(`Note added to ${notesModal}`);
+              setTimeout(() => setToast(null), 3000);
+              setNoteText('');
+              setNotesModal(null);
+            }}
+              className="w-full px-4 py-2.5 bg-brand-navy text-white rounded-lg text-sm font-medium hover:bg-slate-800 disabled:opacity-50">
+              Save Note
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Upload Proof Modal ─── */}
+      {proofModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm mx-4 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold text-slate-900">Upload Proof — {proofModal}</h3>
+              <button type="button" onClick={() => { setProofModal(null); setProofFile(null); }} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
+            </div>
+            <div className="border-2 border-dashed border-slate-200 rounded-lg p-6 text-center mb-4">
+              <input type="file" accept=".pdf,.png,.jpg,.jpeg,.doc,.docx" onChange={e => {
+                const f = e.target.files?.[0];
+                setProofFile(f ? f.name : null);
+              }} className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-brand-blue/10 file:text-brand-blue hover:file:bg-brand-blue/20" />
+              {proofFile && <p className="text-sm text-green-600 font-medium mt-2">✓ {proofFile}</p>}
+              <p className="text-xs text-slate-400 mt-2">PDF, PNG, JPG, DOC — max 10MB</p>
+            </div>
+            <button type="button" disabled={!proofFile} onClick={() => {
+              const key = `rinexor_proofs_${proofModal}`;
+              const existing = JSON.parse(localStorage.getItem(key) || '[]');
+              existing.push({ file: proofFile, time: new Date().toLocaleString() });
+              localStorage.setItem(key, JSON.stringify(existing));
+              setToast(`Proof "${proofFile}" uploaded for ${proofModal}`);
+              setTimeout(() => setToast(null), 3000);
+              setProofFile(null);
+              setProofModal(null);
+            }}
+              className="w-full px-4 py-2.5 bg-brand-teal text-white rounded-lg text-sm font-medium hover:bg-emerald-600 disabled:opacity-50">
+              Upload Proof
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* New Case Modal */}
+      {showNewCase && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-bold text-slate-900">Create New Case</h3>
+              <button type="button" onClick={() => setShowNewCase(false)} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
+            </div>
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">Customer Name *</label>
+                  <input type="text" value={newCase.customer} onChange={e => setNewCase(p => ({ ...p, customer: e.target.value }))}
+                    placeholder="e.g. Acme Corp" className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-brand-blue focus:border-brand-blue" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">Enterprise</label>
+                  <select value={newCase.enterprise} onChange={e => setNewCase(p => ({ ...p, enterprise: e.target.value }))}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-brand-blue">
+                    <option value="">Select Enterprise</option>
+                    <option>TechFlow</option>
+                    <option>Stark Ind</option>
+                    <option>BioNova</option>
+                    <option>Wayne Corp</option>
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">Amount (₹) *</label>
+                  <input type="text" value={newCase.amount} onChange={e => setNewCase(p => ({ ...p, amount: e.target.value }))}
+                    placeholder="e.g. 45,200" className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-brand-blue focus:border-brand-blue" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">DCA Agency</label>
+                  <select value={newCase.agency} onChange={e => setNewCase(p => ({ ...p, agency: e.target.value }))}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-brand-blue">
+                    <option value="">Unassigned</option>
+                    <option>Global Collections</option>
+                    <option>Alpha Recoveries</option>
+                    <option>Summit Financial</option>
+                    <option>Orbit Recovery</option>
+                    <option>Vertex Collections</option>
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">Assigned Agent</label>
+                  <input type="text" value={newCase.agent} onChange={e => setNewCase(p => ({ ...p, agent: e.target.value }))}
+                    placeholder="e.g. Agent Ayesha" className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-brand-blue focus:border-brand-blue" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">Status</label>
+                  <select value={newCase.status} onChange={e => setNewCase(p => ({ ...p, status: e.target.value }))}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-brand-blue">
+                    <option>Active</option>
+                    <option>In Progress</option>
+                    <option>Negotiating</option>
+                    <option>Escalated</option>
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">AI Priority Score ({newCase.score})</label>
+                  <input type="range" min={1} max={100} value={newCase.score} onChange={e => setNewCase(p => ({ ...p, score: Number(e.target.value) }))}
+                    className="w-full" />
+                  <div className="flex justify-between text-[10px] text-slate-400"><span>Low</span><span>Medium</span><span>High</span></div>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">SLA Duration (days)</label>
+                  <input type="number" min={1} max={90} value={newCase.slaDays} onChange={e => setNewCase(p => ({ ...p, slaDays: Number(e.target.value) }))}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-brand-blue focus:border-brand-blue" />
+                </div>
+              </div>
+              <button type="button" onClick={createNewCase} disabled={!newCase.customer.trim() || !newCase.amount.trim()}
+                className="w-full px-4 py-2.5 bg-brand-navy text-white rounded-lg text-sm font-medium hover:bg-slate-800 disabled:opacity-50 inline-flex items-center justify-center gap-2">
+                <Plus size={16} /> Create Case
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex justify-between items-center">
         <div>
-           <h1 className="text-2xl font-bold text-slate-900">
-             {user?.role === 'super_admin'
-               ? 'Case Intelligence'
-               : user?.role === 'enterprise_admin'
-                 ? 'Case Distribution'
-                 : 'My Assigned Cases'}
-           </h1>
-           <p className="text-slate-500">
-             {user?.role === 'super_admin'
-               ? 'Read-only view across all DCAs with risk and allocation context.'
-               : user?.role === 'enterprise_admin'
-                 ? 'Assign and rebalance cases across employees while managing SLA risk.'
-                 : 'Execute recovery tasks, update status, add notes, and upload proof.'}
-           </p>
+          <h1 className="text-2xl font-bold text-slate-900">
+            {user?.role === 'super_admin'
+              ? 'Case Intelligence'
+              : user?.role === 'enterprise_admin'
+                ? 'Case Distribution'
+                : 'My Assigned Cases'}
+          </h1>
+          <p className="text-slate-500">
+            {user?.role === 'super_admin'
+              ? 'Read-only view across all DCAs with risk and allocation context.'
+              : user?.role === 'enterprise_admin'
+                ? 'Assign and rebalance cases across employees while managing SLA risk.'
+                : 'Execute recovery tasks, update status, add notes, and upload proof.'}
+          </p>
         </div>
-        <button type="button" className="px-4 py-2 bg-brand-navy text-white rounded-lg text-sm font-medium hover:bg-slate-800 flex items-center gap-2">
-          <ArrowUpRight size={16} /> {user?.role === 'dca_agent' ? 'Update Status' : 'New Case'}
-        </button>
+        {user?.role !== 'dca_agent' ? (
+          <button type="button" onClick={() => setShowNewCase(true)} className="px-4 py-2 bg-brand-navy text-white rounded-lg text-sm font-medium hover:bg-slate-800 flex items-center gap-2">
+            <Plus size={16} /> New Case
+          </button>
+        ) : (
+          <button type="button" className="px-4 py-2 bg-brand-navy text-white rounded-lg text-sm font-medium hover:bg-slate-800 flex items-center gap-2">
+            <ArrowUpRight size={16} /> Update Status
+          </button>
+        )}
       </div>
 
       {/* Tabs */}
@@ -205,11 +425,10 @@ export default function Cases() {
               type="button"
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`pb-4 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap ${
-                activeTab === tab.id
-                  ? 'border-brand-blue text-brand-blue'
-                  : 'border-transparent text-slate-500 hover:text-slate-700'
-              }`}
+              className={`pb-4 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap ${activeTab === tab.id
+                ? 'border-brand-blue text-brand-blue'
+                : 'border-transparent text-slate-500 hover:text-slate-700'
+                }`}
             >
               {tab.label}
               {'count' in tab && tab.count ? (
@@ -334,7 +553,7 @@ export default function Cases() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filteredCases.map((row: any, i) => (
+              {paginatedCases.map((row: any, i) => (
                 <tr key={i} className="hover:bg-slate-50/50 transition-colors">
                   {columns.map((col) => (
                     <td key={col.key} className="px-6 py-4">
@@ -346,7 +565,7 @@ export default function Cases() {
                       ) : col.key === 'score' ? (
                         <div className="flex items-center gap-3">
                           <div className="w-20 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                            <div className={`h-full ${priorityStyles(row.score).bar}`} style={{width: `${row.score}%`}}></div>
+                            <div className={`h-full ${priorityStyles(row.score).bar}`} style={{ width: `${row.score}%` }}></div>
                           </div>
                           <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${priorityStyles(row.score).tag}`}>
                             {priorityLabel(row.score)} · {row.score}
@@ -357,13 +576,12 @@ export default function Cases() {
                           <Clock size={12} /> {row.sla}
                         </span>
                       ) : col.key === 'status' ? (
-                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
-                          row.status === 'In Progress' ? 'bg-blue-50 text-blue-700' : 
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${row.status === 'In Progress' ? 'bg-blue-50 text-blue-700' :
                           row.status === 'Escalated' ? 'bg-red-50 text-red-700' :
-                          row.status === 'Negotiating' ? 'bg-amber-50 text-amber-700' :
-                          row.status === 'Closed' ? 'bg-slate-100 text-slate-700' :
-                          'bg-emerald-50 text-emerald-700'
-                        }`}>
+                            row.status === 'Negotiating' ? 'bg-amber-50 text-amber-700' :
+                              row.status === 'Closed' ? 'bg-slate-100 text-slate-700' :
+                                'bg-emerald-50 text-emerald-700'
+                          }`}>
                           {row.status === 'Escalated' && <AlertTriangle size={12} />}
                           {row.status}
                         </span>
@@ -383,9 +601,9 @@ export default function Cases() {
                       </div>
                     ) : user?.role === 'dca_agent' ? (
                       <div className="flex items-center justify-end gap-2">
-                        <button type="button" className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-brand-navy text-white hover:bg-slate-800">Update Status</button>
-                        <button type="button" className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200">Add Notes</button>
-                        <button type="button" className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-brand-teal/10 text-brand-teal hover:bg-brand-teal/15">Upload Proof</button>
+                        <button type="button" onClick={() => { setSelectedStatus(row.status); setStatusModal(row.id); }} className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-brand-navy text-white hover:bg-slate-800">Update Status</button>
+                        <button type="button" onClick={() => setNotesModal(row.id)} className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200">Add Notes</button>
+                        <button type="button" onClick={() => setProofModal(row.id)} className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-brand-teal/10 text-brand-teal hover:bg-brand-teal/15">Upload Proof</button>
                       </div>
                     ) : (
                       <button type="button" className="text-slate-400 hover:text-slate-600">
@@ -398,13 +616,32 @@ export default function Cases() {
             </tbody>
           </table>
         </div>
-        
-        {/* Pagination Mock */}
+
+        {/* Pagination */}
         <div className="p-4 border-t border-slate-200 flex justify-between items-center text-sm text-slate-500">
-          <span>Showing 1-{Math.min(filteredCases.length, 10)} of {filteredCases.length} cases</span>
+          <span>
+            Showing {filteredCases.length === 0 ? 0 : (currentPage - 1) * ITEMS_PER_PAGE + 1}-{Math.min(currentPage * ITEMS_PER_PAGE, filteredCases.length)} of {filteredCases.length} cases
+          </span>
           <div className="flex gap-2">
-            <button type="button" className="px-3 py-1 border border-slate-200 rounded hover:bg-slate-50" disabled>Previous</button>
-            <button type="button" className="px-3 py-1 border border-slate-200 rounded hover:bg-slate-50">Next</button>
+            <button
+              type="button"
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              className={`px-3 py-1 border border-slate-200 rounded transition-colors ${currentPage === 1 ? 'opacity-50 cursor-not-allowed' : 'hover:bg-slate-50'}`}
+            >
+              Previous
+            </button>
+            <span className="px-3 py-1 text-slate-700 font-medium">
+              Page {currentPage} of {Math.max(1, totalPages)}
+            </span>
+            <button
+              type="button"
+              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+              disabled={currentPage >= totalPages}
+              className={`px-3 py-1 border border-slate-200 rounded transition-colors ${currentPage >= totalPages ? 'opacity-50 cursor-not-allowed' : 'hover:bg-slate-50'}`}
+            >
+              Next
+            </button>
           </div>
         </div>
       </div>
