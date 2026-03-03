@@ -1,13 +1,31 @@
 /**
  * Rinexor API Client
- * Connects frontend to the FastAPI backend
+ * Connects frontend to the FastAPI backend.
+ * Falls back to mock data when the backend is unavailable (e.g. Vercel static deployment).
  */
+
+import {
+    DEMO_USERS,
+    MOCK_DASHBOARD_KPIS,
+    MOCK_RECOVERY_CHART,
+    MOCK_TOP_DCAS,
+    MOCK_REPORTS_DATA,
+    MOCK_BACKEND_CASES,
+    MOCK_DCAS,
+    MOCK_KPI,
+} from './mockData';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
 interface LoginResponse {
     access_token: string;
     token_type: string;
+    user?: {
+        id: string;
+        name: string;
+        role: string;
+        email: string;
+    };
 }
 
 interface User {
@@ -59,9 +77,29 @@ interface KPI {
 
 class ApiClient {
     private token: string | null = null;
+    private _useMockData: boolean | null = null; // null = not yet checked
 
     constructor() {
         this.token = localStorage.getItem('rinexor_token');
+    }
+
+    /** Check if backend is reachable; cache result */
+    private async shouldUseMockData(): Promise<boolean> {
+        if (this._useMockData !== null) return this._useMockData;
+        try {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 3000);
+            const res = await fetch(`${API_BASE_URL}/auth/login`, {
+                method: 'OPTIONS',
+                signal: controller.signal,
+            });
+            clearTimeout(timeout);
+            // If we get any response (even 405), the backend is alive
+            this._useMockData = !res.ok && res.status === 0;
+        } catch {
+            this._useMockData = true;
+        }
+        return this._useMockData;
     }
 
     private async request<T>(
@@ -93,8 +131,25 @@ class ApiClient {
         return response.json();
     }
 
-    // Authentication
+    // ─── Authentication ───
     async login(email: string, password: string): Promise<LoginResponse> {
+        const useMock = await this.shouldUseMockData();
+
+        if (useMock) {
+            const demoUser = DEMO_USERS[email.toLowerCase()];
+            if (demoUser && demoUser.password === password) {
+                const mockToken = 'demo-token-' + btoa(email);
+                this.token = mockToken;
+                localStorage.setItem('rinexor_token', mockToken);
+                return {
+                    access_token: mockToken,
+                    token_type: 'bearer',
+                    user: demoUser.user,
+                };
+            }
+            throw new Error('Invalid credentials');
+        }
+
         const response = await this.request<LoginResponse>('/auth/login', {
             method: 'POST',
             body: JSON.stringify({ email, password }),
@@ -112,6 +167,7 @@ class ApiClient {
 
     logout(): void {
         this.token = null;
+        this._useMockData = null; // reset for next session
         localStorage.removeItem('rinexor_token');
         localStorage.removeItem('rinexor_user');
     }
@@ -133,13 +189,16 @@ class ApiClient {
         }
     }
 
-    // Cases
+    // ─── Cases ───
     async getCases(filters?: {
         enterprise_id?: string;
         assigned_dca_id?: string;
         status?: string;
         limit?: number;
     }): Promise<BackendCase[]> {
+        const useMock = await this.shouldUseMockData();
+        if (useMock) return MOCK_BACKEND_CASES as BackendCase[];
+
         const params = new URLSearchParams();
         if (filters) {
             Object.entries(filters).forEach(([key, value]) => {
@@ -150,10 +209,20 @@ class ApiClient {
     }
 
     async getCase(caseId: string): Promise<BackendCase> {
+        const useMock = await this.shouldUseMockData();
+        if (useMock) {
+            const found = MOCK_BACKEND_CASES.find(c => c.id === caseId);
+            return (found || MOCK_BACKEND_CASES[0]) as BackendCase;
+        }
         return this.request<BackendCase>(`/cases/${caseId}`);
     }
 
     async updateCase(caseId: string, updates: Partial<BackendCase>): Promise<BackendCase> {
+        const useMock = await this.shouldUseMockData();
+        if (useMock) {
+            const found = MOCK_BACKEND_CASES.find(c => c.id === caseId);
+            return { ...(found || MOCK_BACKEND_CASES[0]), ...updates } as BackendCase;
+        }
         return this.request<BackendCase>(`/cases/${caseId}`, {
             method: 'PUT',
             body: JSON.stringify(updates),
@@ -161,19 +230,25 @@ class ApiClient {
     }
 
     async uploadCases(): Promise<{ message: string; cases: BackendCase[] }> {
+        const useMock = await this.shouldUseMockData();
+        if (useMock) return { message: 'Demo: 8 cases uploaded', cases: MOCK_BACKEND_CASES as BackendCase[] };
         return this.request('/cases/upload', { method: 'POST' });
     }
 
-    // Dashboard
+    // ─── Dashboard ───
     async getKPIs(): Promise<KPI> {
+        const useMock = await this.shouldUseMockData();
+        if (useMock) return MOCK_KPI;
         return this.request<KPI>('/dashboard/kpis');
     }
 
     async getDCAs(): Promise<DCA[]> {
+        const useMock = await this.shouldUseMockData();
+        if (useMock) return MOCK_DCAS;
         return this.request<DCA[]>('/dashboard/dcas');
     }
 
-    // AI Analysis
+    // ─── AI Analysis ───
     async analyzeCase(caseData: Partial<BackendCase>): Promise<{
         recovery_probability: number;
         recovery_score: number;
@@ -182,6 +257,17 @@ class ApiClient {
         risk_factors: string[];
         recommended_action: string;
     }> {
+        const useMock = await this.shouldUseMockData();
+        if (useMock) {
+            return {
+                recovery_probability: 0.72,
+                recovery_score: 78,
+                confidence: 'high',
+                key_factors: ['Strong payment history', 'Responsive borrower', 'Moderate outstanding'],
+                risk_factors: ['Approaching SLA deadline', 'High debt-to-income'],
+                recommended_action: 'Escalate to senior agent with restructured payment plan',
+            };
+        }
         return this.request('/ai/analyze-case', {
             method: 'POST',
             body: JSON.stringify(caseData),
@@ -193,25 +279,50 @@ class ApiClient {
         using_rule_based: boolean;
         message: string;
     }> {
+        const useMock = await this.shouldUseMockData();
+        if (useMock) {
+            return { model_trained: true, using_rule_based: false, message: 'Demo mode – AI model simulated' };
+        }
         return this.request('/ai/model-status');
     }
 
-    // Dashboard Analytics (real data from DB)
+    // ─── Dashboard Analytics (real data from DB) ───
     async getDashboardKPIs(): Promise<DashboardKPIs> {
+        const useMock = await this.shouldUseMockData();
+        if (useMock) return MOCK_DASHBOARD_KPIS;
         return this.request<DashboardKPIs>('/reports/dashboard/kpis');
     }
 
     async getRecoveryChart(months?: number): Promise<RecoveryChartData> {
+        const useMock = await this.shouldUseMockData();
+        if (useMock) {
+            if (months && months < MOCK_RECOVERY_CHART.chart_data.length) {
+                return {
+                    ...MOCK_RECOVERY_CHART,
+                    chart_data: MOCK_RECOVERY_CHART.chart_data.slice(-months),
+                };
+            }
+            return MOCK_RECOVERY_CHART;
+        }
         const params = months ? `?months=${months}` : '';
         return this.request<RecoveryChartData>(`/reports/dashboard/recovery-chart${params}`);
     }
 
     async getTopDCAs(limit?: number): Promise<TopDCAsResponse> {
+        const useMock = await this.shouldUseMockData();
+        if (useMock) {
+            if (limit) {
+                return { top_dcas: MOCK_TOP_DCAS.top_dcas.slice(0, limit) };
+            }
+            return MOCK_TOP_DCAS;
+        }
         const params = limit ? `?limit=${limit}` : '';
         return this.request<TopDCAsResponse>(`/reports/dashboard/top-dcas${params}`);
     }
 
     async getReportsData(): Promise<ReportsData> {
+        const useMock = await this.shouldUseMockData();
+        if (useMock) return MOCK_REPORTS_DATA;
         return this.request<ReportsData>('/reports/dashboard/reports-data');
     }
 }
@@ -277,4 +388,3 @@ interface ReportsData {
 
 export const apiClient = new ApiClient();
 export type { BackendCase, DCA, KPI, User, LoginResponse, DashboardKPIs, RecoveryChartData, TopDCAsResponse, ReportsData };
-

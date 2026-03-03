@@ -36,12 +36,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (response?.access_token) {
         apiClient.setToken(response.access_token);
 
-        // Extract user data from login response
+        // Use user data from response (mock or real backend)
+        const respUser = (response as any).user;
         const userData: User = {
-          id: (response as any).user?.id || 'U-001',
-          name: (response as any).user?.name || email.split('@')[0],
-          role: (response as any).user?.role as UserRole || 'dca_agent',
-          email: (response as any).user?.email || email,
+          id: respUser?.id || 'U-001',
+          name: respUser?.name || email.split('@')[0],
+          role: (respUser?.role as UserRole) || 'dca_agent',
+          email: respUser?.email || email,
         };
 
         setUser(userData);
@@ -51,6 +52,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { success: false, error: 'No access token received' };
     } catch (err: any) {
       console.error('Login failed:', err);
+
+      // Fallback: if API completely fails, try demo credentials locally
+      const demoMatch = Object.values(DEMO_CREDENTIALS).find(
+        c => c.email === email.toLowerCase()
+      );
+      if (demoMatch) {
+        const userData: User = {
+          id: `DEMO-${email}`,
+          name: demoMatch.name,
+          role: Object.keys(DEMO_CREDENTIALS).find(k => DEMO_CREDENTIALS[k].email === email.toLowerCase()) as UserRole || 'dca_agent',
+          email,
+        };
+        setUser(userData);
+        localStorage.setItem('rinexor_user', JSON.stringify(userData));
+        return { success: true };
+      }
+
       return { success: false, error: err?.message || 'Invalid credentials' };
     }
   };
